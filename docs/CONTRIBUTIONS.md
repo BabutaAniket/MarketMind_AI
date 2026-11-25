@@ -15,7 +15,9 @@ Update from the first day. The viva asks each member to explain their part in de
 
 | Date | Member | Change or decision | Evidence (file, commit, result) |
 |---|---|---|---|
-| | | | |
+| 2026-11-25 | Dr. Ashutosh Verma | Supplied the original prototype scaffold and X1-X7 desktop modules used as the starting point | Source archive hashes and reuse/license confirmation still need to be recorded |
+| 2026-11-25 | Aniket Babuta with AI coding assistance | Reorganized the scaffold; added the browser app, approval-hash flow, tests, setup and submission drafts | 46 automated tests pass; confirm the personal contribution description before submission |
+| 2026-11-25 | Aniket Babuta with AI coding assistance | Added LangGraph workflow, four FastMCP servers, LiteLLM adapter, Qdrant/embedding retrieval and local benchmark | `docs/GUIDELINE_STATUS.md`, `eval/retrieval_report.json`; team to review |
 
 ## Reused and AI-assisted work
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterator
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -15,13 +16,14 @@ from marketmind import __version__
 from marketmind.content import build_drafts
 from marketmind.evaluation import run_evaluation, save_report
 from marketmind.feedback import build_feedback_record, save_feedback
-from marketmind.guardrails import check_input, check_output
+from marketmind.guardrails import check_input, check_output, sanitize_data
 from marketmind.ingestion import PROFILE_FIELDS, build_record, load_knowledge
 from marketmind.leads import score_lead
 from marketmind.llm_client import ollama_status
 from marketmind.memory_store import load_approved_lessons, read_json, read_jsonl, write_json
 from marketmind.planner import ask_local_qwen, build_campaign_plan
 from marketmind.retrieval import build_index, search_index
+from marketmind.retrieval_evaluation import run_retrieval_evaluation
 from marketmind.schemas import (
     ActionDecision,
     ActionPrepare,
@@ -31,9 +33,12 @@ from marketmind.schemas import (
     KnowledgeInput,
     LeadInput,
     SearchRequest,
+    WorkflowResume,
+    WorkflowStart,
 )
 from marketmind.settings import (
     DRAFTS_FILE,
+    EVAL_DIR,
     KNOWLEDGE_FILE,
     LEADS_FILE,
     PLAN_FILE,
@@ -43,6 +48,7 @@ from marketmind.settings import (
     STATIC_DIR,
 )
 from marketmind.tools.actions import decide_action, list_actions, prepare_action
+from marketmind.workflow import invoke_workflow, workflow_status
 
 app = FastAPI(title="MarketMind AI", version=__version__)
 
@@ -107,9 +113,11 @@ def sample() -> dict:
 def save_knowledge(body: KnowledgeInput) -> dict:
     if not body.source_text.strip() and not any(body.company_profile.values()):
         raise HTTPException(status_code=422, detail="Provide company details or source text.")
-    record = build_record(body.company_profile, body.source_text)
+    safe_profile = sanitize_data(body.company_profile)
+    safe_source = sanitize_data(body.source_text)
+    record = build_record(safe_profile, safe_source)
     write_json(KNOWLEDGE_FILE, record)
-    screen = check_input(body.source_text)
+    screen = check_input(safe_source)
     flagged = sorted(
         set(screen["risk_categories"]) & SOURCE_RISKS
         | ({"prompt_injection"} if screen["injection_patterns"] else set())
@@ -117,7 +125,10 @@ def save_knowledge(body: KnowledgeInput) -> dict:
     return {
         "saved": True,
         "word_count": record["extraction"]["word_count"],
-        "warnings": flagged,
+        "warnings": sorted(
+            set(flagged)
+            | ({"pii_redacted"} if safe_source != body.source_text or safe_profile != body.company_profile else set())
+        ),
     }
 
 
@@ -131,23 +142,28 @@ def search(body: SearchRequest) -> dict:
 
 
 def plan_events(body: CampaignRequest) -> Iterator[dict]:
-    guard = check_input(body.model_dump_json(exclude={"use_llm"}))
+    safe_request = sanitize_data(body.model_dump(exclude={"use_llm"}))
+    guard = check_input(json.dumps(safe_request, ensure_ascii=False))
     yield {"step": "input_guardrail", "allowed": guard["allowed"], "risk_categories": guard["risk_categories"]}
     if not guard["allowed"]:
         yield {"step": "blocked", "error": "The request was blocked by the input guardrail."}
         return
     knowledge = require_knowledge()
-    results = search_index(build_index(knowledge), f"{body.objective} {body.offer} benefits", top_k=5)
+    results = search_index(
+        build_index(knowledge),
+        f"{safe_request['objective']} {safe_request['offer']} benefits",
+        top_k=5,
+    )
     yield {"step": "retrieval", "passages": len(results)}
     plan = build_campaign_plan(
         knowledge,
         {"results": results},
-        body.objective,
-        body.audience,
-        body.offer,
-        ", ".join(body.channels),
-        body.tone,
-        body.budget,
+        safe_request["objective"],
+        safe_request["audience"],
+        safe_request["offer"],
+        ", ".join(safe_request["channels"]),
+        safe_request["tone"],
+        safe_request["budget"],
     )
     yield {"step": "plan", "created": True}
     if body.use_llm:
@@ -160,6 +176,61 @@ def plan_events(body: CampaignRequest) -> Iterator[dict]:
             yield {"step": "llm", "status": "done"}
     write_json(PLAN_FILE, plan)
     yield {"step": "done", "plan": plan}
+
+
+def _workflow_view(result: dict) -> dict:
+    interruptions = result.get("__interrupt__", ())
+    pending = []
+    for item in interruptions:
+        value = getattr(item, "value", None)
+        if value is not None:
+            pending.append(value)
+    return {
+        "thread_id": result["thread_id"],
+        "status": result.get("status", "running"),
+        "events": result.get("events", []),
+        "plan": result.get("plan"),
+        "strategy": result.get("strategy"),
+        "content_brief": result.get("content_brief"),
+        "lead_brief": result.get("lead_brief"),
+        "specialists": result.get("specialists", {}),
+        "drafts": result.get("drafts"),
+        "review": result.get("review"),
+        "action": result.get("action"),
+        "tool_calls": result.get("tool_calls", []),
+        "retries": result.get("retries", 0),
+        "interrupts": pending,
+        "errors": result.get("errors", []),
+    }
+
+
+@app.post("/api/workflow/start")
+def start_workflow(body: WorkflowStart) -> dict:
+    thread_id = body.thread_id or str(uuid4())
+    result = invoke_workflow(
+        body.campaign.model_dump(exclude={"use_llm"}),
+        thread_id=thread_id,
+    )
+    return _workflow_view(result)
+
+
+@app.get("/api/workflow/{thread_id}")
+def get_workflow(thread_id: str) -> dict:
+    state = workflow_status(thread_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Workflow not found.")
+    return state
+
+
+@app.post("/api/workflow/{thread_id}/resume")
+def resume_workflow(thread_id: str, body: WorkflowResume) -> dict:
+    state = workflow_status(thread_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Workflow not found.")
+    if state.get("status") != "awaiting_approval":
+        raise HTTPException(status_code=409, detail="Workflow is not waiting for approval.")
+    result = invoke_workflow(thread_id=thread_id, resume=body.model_dump())
+    return _workflow_view(result)
 
 
 @app.post("/api/plan")
@@ -246,6 +317,13 @@ def evaluation_run() -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     save_report(report)
+    return report
+
+
+@app.post("/api/evaluation/retrieval")
+def retrieval_evaluation() -> dict:
+    report = run_retrieval_evaluation()
+    write_json(EVAL_DIR / "retrieval_report.json", report)
     return report
 
 

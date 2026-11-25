@@ -113,7 +113,7 @@ async function setupCompany() {
 function resultCard(item, index) {
   return el("div", { class: "card" }, [
     el("h4", { text: `${index + 1}. ${item.chunk_id}` }),
-    el("div", { class: "meta", text: `${item.source_ref} | ${item.source_date} | hybrid ${item.score} (BM25 ${item.bm25_score}, TF-IDF ${item.vector_score})` }),
+    el("div", { class: "meta", text: `${item.source_ref} | ${item.source_date} | RRF ${item.rrf_score} | BM25 rank ${item.bm25_rank}, vector rank ${item.vector_rank}` }),
     el("div", { class: "text", text: item.text }),
   ]);
 }
@@ -147,6 +147,66 @@ function setupCampaign() {
       for (const line of lines.filter(Boolean)) handlePlanEvent(JSON.parse(line));
     }
   });
+
+  $("run-workflow").onclick = (event) => guarded(event.target, $("workflow-out"), async () => {
+    const campaign = Object.fromEntries(new FormData($("campaign-form")).entries());
+    campaign.channels = campaign.channels.split(",").map((channel) => channel.trim()).filter(Boolean);
+    const result = await api("/api/workflow/start", { campaign });
+    renderWorkflow(result);
+  });
+}
+
+function renderWorkflow(result) {
+  const out = $("workflow-out");
+  const card = el("div", { class: "card" }, [
+    el("h4", { text: `LangGraph workflow: ${result.status}` }),
+    el("div", { class: "meta", text: `Thread ${result.thread_id} | checkpointed in SQLite` }),
+    el("ol", { class: "steps" }, (result.events || []).map((item) => el("li", {
+      text: `${item.node}: ${item.status || item.result || item.passages || (item.passed === undefined ? "complete" : item.passed ? "passed" : "review required")}`,
+    }))),
+  ]);
+  if (result.errors?.length) card.append(el("div", { class: "msg error", text: result.errors.join("; ") }));
+  if (result.plan) card.append(el("details", {}, [
+    el("summary", { text: "View plan" }),
+    json(result.plan),
+  ]));
+  if (result.review) card.append(el("div", { class: "msg", text: result.review.passed ? "Draft checks passed." : "Draft checks require review." }));
+
+  const approval = result.interrupts?.[0];
+  if (approval) {
+    const editor = el("textarea", { rows: "10" });
+    editor.value = JSON.stringify(approval.payload, null, 2);
+    const notice = el("div", { class: "msg", text: `Review the exact payload. Hash: ${approval.payload_hash}` });
+    const controls = el("div", { class: "row" });
+    const send = async (button, decision, extra = {}) => {
+      button.disabled = true;
+      try {
+        const next = await api(`/api/workflow/${encodeURIComponent(result.thread_id)}/resume`, {
+          decision,
+          payload_hash: approval.payload_hash,
+          reviewer: "web user",
+          ...extra,
+        });
+        renderWorkflow(next);
+      } catch (error) {
+        show(out, error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    };
+    controls.append(
+      el("button", { text: "Approve exact payload", onclick: (event) => send(event.currentTarget, "approve") }),
+      el("button", { class: "secondary", text: "Save edit (new approval required)", onclick: (event) => {
+        let edited;
+        try { edited = JSON.parse(editor.value); } catch { return show(out, "Edited payload must be valid JSON.", true); }
+        return send(event.currentTarget, "edit", { edited_payload: edited });
+      } }),
+      el("button", { class: "secondary", text: "Reject", onclick: (event) => send(event.currentTarget, "reject") }),
+    );
+    card.append(notice, editor, controls);
+  }
+  if (result.action) card.append(el("div", { class: "meta", text: `Action ${result.action.action_id}: ${result.action.status}; external side effects are disabled.` }));
+  out.replaceChildren(card);
 }
 
 function handlePlanEvent(event) {
@@ -263,6 +323,15 @@ function setupEvaluation() {
       el("div", { class: "meta", text: r.scope }),
     ]);
     show($("eval-out"), el("div", {}, [summary, json(r)]));
+  });
+  $("run-retrieval-eval").onclick = (event) => guarded(event.target, $("retrieval-eval-out"), async () => {
+    const r = await api("/api/evaluation/retrieval", {});
+    const summary = el("div", { class: "card" }, [
+      el("h4", { text: `Recall@5: ${r.before.recall} → ${r.after.recall}` }),
+      el("div", { text: `${r.query_count} labeled queries; ${r.labeled_passages} relevant passages; change ${r.change >= 0 ? "+" : ""}${r.change}.` }),
+      el("div", { class: "meta", text: "Synthetic company development set; do not treat as held-out results." }),
+    ]);
+    show($("retrieval-eval-out"), el("div", {}, [summary, json(r)]));
   });
 }
 

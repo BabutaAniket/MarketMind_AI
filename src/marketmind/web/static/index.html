@@ -4,6 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MarketMind AI</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -48,11 +52,22 @@
         <label>Channels <input name="channels" value="Instagram, Facebook, WhatsApp, Email"></label>
         <label>Tone <input name="tone" value="Professional, clear, trustworthy"></label>
         <label>Budget <input name="budget" value="Small test budget"></label>
+        <label>Workflow design
+          <select name="design">
+            <option value="team" selected>Team workflow (C2)</option>
+            <option value="single">Single agent (C1)</option>
+            <option value="fixed">Fixed template (C0)</option>
+          </select>
+        </label>
       </form>
       <label class="check"><input type="checkbox" id="use-llm"> Also generate drafts with the local model (Ollama)</label>
       <button id="run-plan">Create plan</button>
       <ol id="plan-steps" class="steps"></ol>
       <div id="plan-out" class="out"></div>
+      <h3>Resumable approval workflow</h3>
+      <p class="hint">Runs the LangGraph workflow, saves checkpoints, and pauses for human approval of the exact mock action.</p>
+      <button id="run-workflow" class="secondary">Run approval workflow</button>
+      <div id="workflow-out" class="cards"></div>
     </section>
 
     <section id="drafts" data-title="4. Drafts">
@@ -102,6 +117,10 @@
       <p class="hint">Runs the input guardrail on the golden set and the red-team set. It does not score agent output quality.</p>
       <button id="run-eval">Run evaluation</button>
       <div id="eval-out" class="out"></div>
+      <h3>Retrieval Recall@5</h3>
+      <p class="hint">Thirty labeled queries for the included synthetic company; a development benchmark, not held-out evidence.</p>
+      <button id="run-retrieval-eval" class="secondary">Run retrieval benchmark</button>
+      <div id="retrieval-eval-out" class="out"></div>
     </section>
   </main>
 

@@ -4,62 +4,85 @@
 
 ```mermaid
 flowchart TD
-    U[User: browser or desktop app] --> API[FastAPI service]
-    API --> IG[Input guardrail]
-    IG -->|blocked| STOP[Request refused]
-    IG --> PL[Planner and specialist agents]
-    PL --> KT[Knowledge tool: hybrid search]
-    PL --> LLM[Local model via Ollama - optional]
-    KT --> KB[(Saved company knowledge)]
-    PL --> OG[Output claims check]
-    OG --> AQ[Approval queue]
-    AQ -->|exact payload hash matches| ACT[Action tool - mock only]
-    ACT --> REC[(Local records: leads, actions)]
-    H[Human reviewer: approve, edit, reject] --> AQ
-    H --> FB[Feedback and approved lessons]
-    FB --> LLM
-    API --> M[Prometheus metrics]
-    M --> G[Grafana and alerts]
-    EV[Evaluation: golden set and red team] --> IG
+    U[Browser or desktop user] --> API[FastAPI]
+    API --> G[LangGraph: typed state + SQLite checkpointer]
+    G --> IG[Input guardrail]
+    IG -->|blocked| STOP[Stop]
+    IG --> R[Research specialist]
+    R --> KM[Knowledge FastMCP]
+    KM --> Q[FastEmbed vectors + Qdrant in-memory]
+    KM --> BM[BM25]
+    Q --> RF[Reciprocal Rank Fusion + overlap reranker]
+    BM --> RF
+    RF --> P[Planner]
+    P --> S[Strategy specialist]
+    S --> C[Content specialist]
+    C --> L[Lead specialist]
+    L --> D[Template drafts]
+    D --> V[Review + Checks FastMCP]
+    V -->|failed check, one retry| D
+    V -->|passed| A[Prepare action via Actions FastMCP]
+    A --> I[LangGraph interrupt: exact payload + SHA-256]
+    H[Human reviewer] -->|approve / edit / reject| I
+    I -->|approved exact hash| M[Mock action only]
+    M --> LE[Local leads/actions JSON]
+    U --> FB[Human feedback]
+    FB --> MEM[Approved lesson JSONL]
+    API --> MET[/metrics]
+    MET --> PR[Prometheus]
+    PR --> GR[Grafana + alert rule]
+    API -. optional .-> LT[LiteLLM]
+    LT -. local route .-> OL[Ollama + Qwen3]
+    LT -. optional route .-> OR[OpenRouter]
 ```
 
-## Walkthrough of one request
+## Walkthrough of the LangGraph workflow
 
-1. The user saves company information (profile fields and source text). Source text is screened for injection patterns and warned about, not blocked.
-2. A campaign request arrives at `/api/plan/stream`. The input guardrail checks the whole request (`guardrails.check_input`). A blocked request stops here.
-3. The knowledge tool chunks the saved information, keeping source and date metadata, and runs hybrid BM25 + TF-IDF search. The top passages become cited evidence.
-4. The planner builds a plan object (angle, channel plan, specialist briefs, evidence, safety flags). Progress events stream to the browser.
-5. Optionally the local model produces JSON channel drafts from the plan, the evidence and approved lessons only.
-6. Template drafts for each channel are checked by the output claims check.
-7. Sending a draft or saving a lead creates a pending action with the exact payload and its SHA-256 hash.
-8. The human approves the exact hash, edits (which changes the hash and needs new approval) or rejects. Approval of an unknown, changed, rejected or already executed action is refused.
-9. An approved action runs once as a mock. Saved leads go to a local file only.
-10. Feedback is stored. Only human-approved lessons guide later prompts.
+1. The user saves one company profile and its source text. The demo sample is fictional. Text is screened for selected injection risks.
+2. `POST /api/workflow/start` starts a graph run with a unique `thread_id`.
+3. The graph checks the request, then calls the read-only knowledge FastMCP tool through the tool gateway.
+4. Retrieval preserves passage IDs, source references and dates. It combines BM25 and FastEmbed vectors in a local-memory Qdrant collection using RRF and a content-word overlap reranker.
+5. Planner, strategy, content and lead specialist nodes pass typed `AgentMessage` data. They are deterministic functions; they are not independent model agents.
+6. Channel drafts use Ashutosh's template approach. The review node calls the Checks FastMCP server. A forbidden phrase can trigger one deterministic correction attempt.
+7. The publisher role prepares a mock action through the Actions FastMCP server. The graph pauses at `interrupt()` and checkpoints the state in SQLite.
+8. The reviewer sees the exact payload and hash. An edit changes the hash and returns the workflow to the interrupt. A stale hash, replay, or rejected action cannot execute.
+9. Resume uses `Command(resume=...)` and the same `thread_id`. Approved publication is recorded as mock-only; no external system is contacted.
+
+The app also retains the simpler baseline routes: `/api/plan` and `/api/plan/stream`.
+
+The workflow form can route to fixed-template, single-node, or team-node designs. These are deterministic dry-run routes for exercising graph control flow; they are not the required fair E1 result because no real model or cost/quality comparison has been run.
+
+## Tool gateway
+
+| Agent | Allowed tools |
+|---|---|
+| Research | Search knowledge, get passage |
+| Content | Check marketing copy |
+| Review | Check request and marketing copy |
+| Lead | Read leads, qualify a lead |
+| Publisher | Prepare a mock publish action |
+
+The gateway rejects calls outside an agent's allowlist and enforces the configured call budget. Tool results are structured. Four FastMCP servers have in-process tests. Compose configures HTTP transport, but that deployment path is not yet verified.
 
 ## Who decides
 
 | Decision | Made by |
 |---|---|
-| Whether a request is allowed | Code (regex guardrail) |
-| Which passages are evidence | Code (hybrid search) |
-| Draft wording | Template or local model |
-| Forbidden-claim flag | Code |
-| Lead score and recommendation | Code |
-| Whether an action runs | Human, enforced by code |
-| Whether a lesson is used | Human |
+| Whether a request matches known unsafe patterns | Guardrail code |
+| Which passages are retrieved | BM25, vector search, RRF and reranker code |
+| Draft wording | Templates; optional model route through LiteLLM |
+| Lead score | Deterministic code |
+| Whether a prepared action runs | Human decision checked by code |
+| Whether a lesson is stored for reuse | Human reviewer |
 
-## Guide architecture mapping
+## Known limits
 
-| Guide box | This project |
-|---|---|
-| Chat UI + FastAPI streaming | Web app and `/api/plan/stream` (NDJSON). No authentication yet |
-| Input / output guardrails | `guardrails.py` (rule based) |
-| Supervisor and specialists (LangGraph) | `orchestrator.py`, `agents.py`: sequential, rule based, **not LangGraph** |
-| MCP servers | `tools/`: plain Python functions, **not FastMCP servers** |
-| Hybrid index | `retrieval.py`: BM25 + TF-IDF, no embeddings, reranker or RRF |
-| Approval gate | `tools/actions.py`: hash-bound approval, **not `interrupt()`** |
-| Traces, Grafana | `/metrics`, Prometheus, Grafana files (unverified) |
-| Eval harness | `evaluation.py`: guardrail only |
-| Improvement loop | Manual approved lessons, **no Reflexion loop** |
+- The Qdrant collection is in-memory and rebuilt for each query; it is not a persistent service.
+- The overlap reranker is a deterministic baseline, not a cross-encoder.
+- The 30-query Recall@5 set is hand-labeled for the included synthetic company only.
+- No real Ollama or OpenRouter generation has been run here.
+- No authentication or reviewer identity is implemented.
+- Compose, Grafana and external HTTP MCP transports still need a clean-machine test.
+- Reflexion, E1-E4, the calibrated judge and full held-out evaluation remain pending.
 
 Redraw this diagram by hand for the final review, as the guidelines require.

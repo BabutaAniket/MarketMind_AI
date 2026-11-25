@@ -7,8 +7,61 @@ services:
       LLM_PROVIDER: ollama
       OLLAMA_URL: http://host.docker.internal:11434/api/chat
       OLLAMA_MODEL: qwen3:4b
+      MARKETMIND_MCP_KNOWLEDGE_URL: http://mcp-knowledge:8101/mcp
+      MARKETMIND_MCP_RECORDS_URL: http://mcp-records:8102/mcp
+      MARKETMIND_MCP_CHECKS_URL: http://mcp-checks:8103/mcp
+      MARKETMIND_MCP_ACTIONS_URL: http://mcp-actions:8104/mcp
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - app-data:/app/data/output
+    depends_on:
+      - mcp-knowledge
+      - mcp-records
+      - mcp-checks
+      - mcp-actions
+
+  mcp-knowledge:
+    build: .
+    command: ["python", "-m", "marketmind.mcp.knowledge_server"]
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8101
+      DATA_DIR: /app/data/output
+    volumes:
+      - app-data:/app/data/output
+
+  mcp-records:
+    build: .
+    command: ["python", "-m", "marketmind.mcp.records_server"]
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8102
+      DATA_DIR: /app/data/output
+    volumes:
+      - app-data:/app/data/output
+
+  mcp-checks:
+    build: .
+    command: ["python", "-m", "marketmind.mcp.checks_server"]
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8103
+      DATA_DIR: /app/data/output
+    volumes:
+      - app-data:/app/data/output
+
+  mcp-actions:
+    build: .
+    command: ["python", "-m", "marketmind.mcp.actions_server"]
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8104
+      DATA_DIR: /app/data/output
     volumes:
       - app-data:/app/data/output
 

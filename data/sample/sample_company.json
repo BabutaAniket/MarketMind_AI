@@ -1,16 +1,16 @@
 {
-  "note": "Synthetic sample for demos and tests. Not verified company information.",
+  "note": "Fictional company profile for demonstration only. It does not describe a real business.",
   "company_profile": {
-    "company_name": "MOSETA Solar AC (sample)",
-    "brand_name": "MOSETA Solar AC",
-    "products": "Solar-hybrid air conditioners",
-    "target_customer": "Homes, offices, schools, banks and institutions",
-    "customer_problem": "High electricity bills and unreliable cooling",
-    "usp": "Energy-efficient cooling with solar-hybrid operation",
-    "offer_price": "Request a product consultation",
-    "location": "India",
-    "tone": "Professional, clear and trustworthy",
-    "restrictions": "Avoid guaranteed savings, exact bill-reduction percentages, warranty terms and competitor comparisons"
+    "company_name": "Cedarline Studio (synthetic)",
+    "brand_name": "Cedarline Board",
+    "products": "A web-based task board for small project teams",
+    "target_customer": "Small project teams coordinating shared work",
+    "customer_problem": "Task owners, due dates and progress can be hard to track across separate notes",
+    "usp": "Tasks, owners, due dates and status appear on one shared board",
+    "offer_price": "Request a guided product walkthrough",
+    "location": "Online",
+    "tone": "Professional and clear",
+    "restrictions": "Do not claim integrations, security certifications, uptime, pricing, or productivity results unless an approved source confirms them"
   },
-  "source_text": "MOSETA Solar AC\nEnergy-efficient air conditioner for homes, offices and institutions.\nKey benefits: lower electricity consumption, reliable cooling, green technology and professional support.\nCustomer problem: high electricity bills and unreliable cooling.\nCall to action: request a product consultation.\nAvoid unsupported medical, financial or guaranteed-saving claims."
+  "source_text": "Cedarline Studio is a synthetic company used for demonstration. Cedarline Board is a web-based task board for small project teams coordinating shared work. A team member can create a task, assign an owner, add a due date, and set a status. Tasks, owners, due dates, and status are shown on one shared board. This demo profile makes no claims about integrations, security certifications, uptime, pricing, or productivity results. Ask for a guided product walkthrough."
 }

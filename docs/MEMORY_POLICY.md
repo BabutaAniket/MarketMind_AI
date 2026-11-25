@@ -8,7 +8,7 @@ MarketMind keeps only human-reviewed feedback that can improve later drafts. Thi
 |---|---|---|
 | Company knowledge (profile and source text) | The user clicks save | `data/output/knowledge_base.json` |
 | Latest campaign plan | A plan is created | `data/output/campaign_plan.json` |
-| Feedback record: original request, corrected meaning, decision, lesson, draft, source references, timestamp | The reviewer approves or rejects | `data/output/feedback_records.jsonl` |
+| Feedback record: contact-redacted request and correction, decision, lesson, draft, source references, timestamp | The reviewer approves or rejects | `data/output/feedback_records.jsonl` |
 | Approved lesson | The reviewer **approves** | `data/output/approved_lessons.jsonl` |
 | Approval actions and their status | An action is prepared or decided | `data/output/actions.json` |
 | Leads | An approved `write_lead` action executes | `data/output/leads.jsonl` |
@@ -16,6 +16,8 @@ MarketMind keeps only human-reviewed feedback that can improve later drafts. Thi
 ## What guides future prompts
 
 Only records with `human_approved: true`, and at most the latest five. Lessons shape style, safety and wording. They are never treated as facts: product facts must come from the saved knowledge and the retrieved passages.
+
+Email addresses and Indian phone numbers are masked when company source text, campaign requests and feedback fields are stored or checkpointed. Explicit lead contact fields are stored locally after approval because they are part of the lead record.
 
 Not used: rejected drafts, unreviewed model output, unconfirmed claims, keys or passwords. Rejected feedback stays in the audit file only.
 

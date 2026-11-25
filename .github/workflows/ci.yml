@@ -11,7 +11,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: ruff check src apps tests scripts
+      - run: ruff check src apps tests scripts eval
       - run: pytest -q
       - name: Guardrail evaluation gate
         run: python scripts/eval_gate.py

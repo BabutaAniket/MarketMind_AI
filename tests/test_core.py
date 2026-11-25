@@ -1,6 +1,6 @@
 from marketmind.guardrails import check_input, check_output
 from marketmind.leads import score_lead
-from marketmind.memory_store import append_jsonl, load_approved_lessons
+from marketmind.memory_store import append_jsonl, load_approved_lessons, relevant_approved_lessons
 from marketmind.orchestrator import CampaignState, run_campaign
 from marketmind.settings import LESSONS_FILE
 
@@ -36,6 +36,14 @@ def test_only_human_approved_lessons_are_loaded():
 
 def test_no_lessons_when_file_missing():
     assert load_approved_lessons() == []
+
+
+def test_only_context_relevant_approved_lessons_are_retrieved():
+    append_jsonl(LESSONS_FILE, {"lesson": "Use concise Instagram captions", "human_approved": True})
+    append_jsonl(LESSONS_FILE, {"lesson": "Use a short email subject", "human_approved": True})
+    append_jsonl(LESSONS_FILE, {"lesson": "Use concise Instagram captions", "human_approved": False})
+    found = relevant_approved_lessons("Instagram launch", limit=5)
+    assert [row["lesson"] for row in found] == ["Use concise Instagram captions"]
 
 
 def test_lead_scoring_thresholds():

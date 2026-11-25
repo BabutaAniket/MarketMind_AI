@@ -1,51 +1,65 @@
 # Evaluation report (draft)
 
-Target length for submission: 4-6 pages. Sections marked **TODO** need evidence that does not exist yet. Do not fill them with estimates.
+This is a prototype evaluation, not the final capstone report. It reports measured results and keeps the remaining required experiments explicit.
 
 ## 1. Scope and users
 
-User: a marketer at a small company who needs channel drafts and lead follow-up grounded in approved company information. Impact measure to report: editing time per approved draft and share of claims supported by a cited passage. Neither is measured yet. **TODO**
+User: a marketer at a small company who needs channel drafts and lead follow-up grounded in approved company information. Proposed impact measures are editing time per approved draft and the proportion of factual claims supported by cited passages. Neither has been measured with human users.
 
-## 2. Data
+## 2. Data and method
 
 | Set | File | Cases | Notes |
-|---|---|---|---|
-| Golden set | `eval/golden_set.jsonl` | 60 (40 dev, 20 held-out) | MOSETA-based requests. The guideline asks for about 20 dev and 40+ held-out |
-| Red team | `eval/red_team_cases.jsonl` | 30 | Natural-language unsafe requests with risk categories |
+|---|---|---:|---|
+| Campaign golden set | `eval/golden_set.jsonl` | 60 | 40 development / 20 held-out; this does not meet the guide's roughly 20 dev / 40+ held-out split |
+| Red-team set | `eval/red_team_cases.jsonl` | 30 | Natural-language unsafe requests |
+| Retrieval labels | `eval/retrieval_golden.jsonl` | 30 queries / 58 relevant passage labels | Hand-labeled against the included synthetic Cedarline profile; development data only |
 
-The sets were generated with a local model (`eval/generate_sets.py`) and the expected outcome of every golden case is the same four-point checklist. They are a starting point: expected outcomes should be written by the product and evaluation lead before any run, and held-out cases must be kept away from the person tuning the agents. **TODO**
+The campaign set has a repeated four-point expected checklist and is not yet a strong independent benchmark. The retrieval set is specific to one synthetic company, not representative of a broad corpus.
 
-## 3. Measured results
+## 3. Retrieval Recall@5
 
-Input guardrail only, from `scripts/eval_gate.py`:
+Run: `python scripts/retrieval_eval.py`. Exact per-query results are saved in `eval/retrieval_report.json`.
 
-| Measure | Result | Threshold |
-|---|---|---|
-| Red-team attacks blocked | 13 / 30 (43.3%) | 85% |
-| Legitimate golden cases allowed | 56 / 60 (93.3%) | 85% |
-| Gate | **Fails** | |
+| Method | Relevant passages retrieved | Recall@5 |
+|---|---:|---:|
+| Previous weighted BM25 + TF-IDF cosine baseline | 42 / 58 | 0.7241 |
+| FastEmbed MiniLM vectors in in-memory Qdrant + BM25 RRF + overlap reranker | 50 / 58 | 0.8621 |
+| Change | +8 passages | +0.1380 |
 
-Reading: the attacks are mostly requests for unsupported claims, guarantees and unapproved commitments written in ordinary language. A keyword input filter cannot recognise them, and 4 legitimate requests that mention "guaranteed" in a negative sense were blocked. Output-side claim verification and a trained classifier are the needed fixes. Do not tune the patterns to this attack set and then report it as held-out.
+This is a reproducible before/after comparison on the current 30-query development set. The previous method is reimplemented from prior code rather than taken from a saved historical run. Qdrant rebuilds an in-memory collection per query; the overlap reranker is not a cross-encoder.
 
-The earlier scaffold report (12/30) and the generic placeholder sets (30/30 blocked) are not comparable: the generic set contained obvious phrases.
+## 4. Input guardrail evaluation
 
-## 4. Not yet measured (required)
+Run: `python scripts/eval_gate.py`. Scope is the **input regex guardrail only**, not the complete agent workflow or generated output.
+
+| Configuration | Attack success | False blocks on legitimate requests |
+|---|---:|---:|
+| Defences off | 30 / 30 (100%) | 0 / 60 (0%) |
+| Defences on | 17 / 30 (56.7%) | 4 / 60 (6.7%) |
+| Required gate | at most 15% attack success and at most 15% false blocks | **Fails:** attack success is too high |
+
+With defences on, 13 of 30 attacks were blocked and 56 of 60 ordinary requests were allowed. The misses include natural-language promises and unsupported commercial claims; the false blocks include benign mentions of guarantees. Do not tune against this set and then call it held-out.
+
+## 5. Workflow verification
+
+The LangGraph demo workflow was exercised over HTTP. It produced research, planning, specialist, review and action-preparation events; called knowledge, checks and action FastMCP tools; and paused for approval. Tests edited the payload, confirmed its hash changed, rejected approval with the old hash, then resumed and approved the current hash. The action remained mock-only.
+
+This verifies the local prototype mechanics. It is not a campaign-quality evaluation and does not prove process kill/restart recovery in a live demonstration.
+
+## 6. Required results still missing
 
 | Item | Status |
 |---|---|
-| Retrieval Recall@5 on 30+ labelled queries, before and after one change | **TODO** |
-| Task success, trajectories and tool use on the golden set | **TODO** |
-| Judge from a different model family; 20+ human labels; Cohen's kappa | **TODO** |
+| 60+ independent campaign cases with about 20 development / 40+ protected held-out | **TODO** |
+| Outcomes, trajectories and tool-use scoring over the full workflow | **TODO** |
+| Different-family judge, 20+ human labels and Cohen's kappa | **TODO** |
 | E1 fixed vs single agent vs team | **TODO** |
-| E2 defences off vs on, attack success and false blocks end to end | **TODO** |
-| E3 playbook off vs on on held-out, with lesson cost | **TODO** |
+| E2 full workflow defences off vs on | **TODO** |
+| E3 held-out playbook off vs on, including lesson cost | **TODO** |
 | E4 signature ablation | **TODO** |
-| Cost, median and P95 latency, errors, 3 repeats | **TODO** |
+| Cost, median/P95 latency, errors and three final repeats | **TODO** |
+| Human editing-time study and claim-support evaluation | **TODO** |
 
-## 5. Failure analysis
+## 7. Limits
 
-Record each failed or timed-out run, its category, and what changed. **TODO**
-
-## 6. Limits
-
-Prototype with rule-based agents; no authentication; single company; mock actions only; local-model output unverified. Requirements before a supervised pilot: authentication and roles, real held-out evaluation, claim-to-passage verification, and a privacy review of stored leads.
+The specialists are deterministic functions, not independent LLM agents. No real Ollama or OpenRouter generation was run in the current environment. The app has no authentication, supports one active company, and stores records in local JSON. No external actions occur. Before a supervised pilot, add authentication and roles, perform a privacy review, strengthen output claim verification, and test deployment on a clean machine.

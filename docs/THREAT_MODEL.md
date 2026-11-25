@@ -29,7 +29,7 @@ One page. Scope: the MarketMind AI web and desktop apps running locally with an 
 | 8 | Personal data exposure | Guardrail redacts emails and Indian phone numbers in checked text | Leads are stored unmasked in a local file |
 | 9 | Unauthenticated access to the API | Binds to 127.0.0.1 by default | No authentication or roles |
 | 10 | Cross-company disclosure | Single company per data folder | No multi-tenant isolation |
-| 11 | Excessive model cost or loops | Local model; single call per plan | No budget hooks |
+| 11 | Excessive tool loops | Gateway call budget per workflow | No token, monetary-cost or latency budget |
 
 ## Least privilege
 
@@ -37,4 +37,4 @@ Only the action tool can write a lead, and only after an approved decision. The 
 
 ## Not covered
 
-Multi-user authentication, rate limiting, tool-level hooks, trained injection classifiers (for example Llama Prompt Guard), and an end-to-end attack run with defences off versus on. These are required for the final evidence and are tracked in [GUIDELINE_STATUS.md](GUIDELINE_STATUS.md).
+Multi-user authentication, rate limiting, trained injection classifiers (for example Llama Prompt Guard), and an end-to-end attack run with defences off versus on. The tool gateway has agent allowlists and a call-count budget, but there are no authenticated MCP identities or token/cost budgets. These are required for the final evidence and are tracked in [GUIDELINE_STATUS.md](GUIDELINE_STATUS.md).

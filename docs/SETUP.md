@@ -36,11 +36,11 @@ The app has no login. Run it only on your own machine or a trusted network.
 ## 3. First use
 
 1. **Company**: click *Load sample company*, then *Save knowledge*. Or paste your own approved company information.
-2. **Search**: ask a question; each result shows its passage ID, source and date.
-3. **Campaign**: create a plan. Tick the local-model option once Ollama is ready.
-4. **Drafts**: generate channel drafts; each is checked for forbidden claims.
-5. **Approvals**: send a draft or lead here. Approve, edit or reject the exact payload.
-6. **Feedback**: approve a lesson to guide later local-model prompts.
+2. **Search**: ask a question; each result shows its passage ID, source and date. The first search downloads the FastEmbed model (internet required once).
+3. **Campaign**: use **Run approval workflow** for the LangGraph/SQLite/approval demo. **Create plan** is the simpler baseline route.
+4. **Drafts**: generate channel drafts; each is checked for forbidden phrases.
+5. **Approvals**: edit and approve the exact payload. The workflow resumes from its checkpoint.
+6. **Feedback**: approve a lesson to guide later model prompts.
 7. **Evaluation**: run the guardrail evaluation.
 
 ## 4. Local model (optional)
@@ -50,17 +50,30 @@ ollama pull qwen3:4b
 .\.venv\Scripts\python.exe scripts\check_ollama.py
 ```
 
-The status bar in the web app shows whether Ollama is reachable and the model is installed. Change the model or URL with `config/config.json` or the environment variables in `.env.example`. Without Ollama everything except local-model generation still works.
+The status bar in the web app shows whether Ollama is reachable and the model is installed. Change the model or URL with `config/config.json` or the environment variables in `.env.example`. Without Ollama the web app, Qdrant/BM25 retrieval, LangGraph approval workflow, template drafts, lead scoring and guardrail evaluation still work. Model-generated drafts remain unavailable.
 
 OpenRouter is supported through `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY` and `OPENROUTER_MODEL`. Never commit a key.
 
 ## 5. Desktop apps (optional)
 
+Install the project first using section 1, then run a desktop app from the project folder in PowerShell:
+
 ```powershell
 .\.venv\Scripts\python.exe apps\desktop\knowledge_app.py
 ```
 
-Other apps in `apps/desktop`: `retrieval_app`, `content_app`, `planner_app`, `feedback_app`, `leads_app`, `evaluation_app`. They read and write the same files in `data/output` as the web app.
+This opens the Company Knowledge window. The desktop tools are separate windows rather than one combined launcher. To open another tool, close the current window and run its script instead:
+
+```powershell
+.\.venv\Scripts\python.exe apps\desktop\retrieval_app.py
+.\.venv\Scripts\python.exe apps\desktop\content_app.py
+.\.venv\Scripts\python.exe apps\desktop\planner_app.py
+.\.venv\Scripts\python.exe apps\desktop\feedback_app.py
+.\.venv\Scripts\python.exe apps\desktop\leads_app.py
+.\.venv\Scripts\python.exe apps\desktop\evaluation_app.py
+```
+
+Each app reads and writes the same files in `data/output` as the web app. No web server is needed for the desktop tools.
 
 ## 6. Test
 
@@ -68,6 +81,8 @@ Other apps in `apps/desktop`: `retrieval_app`, `content_app`, `planner_app`, `fe
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check src apps tests scripts eval
 $env:PYTHONPATH = "src"; .\.venv\Scripts\python.exe scripts\eval_gate.py
+.\.venv\Scripts\python.exe scripts\retrieval_eval.py
+.\.venv\Scripts\python.exe scripts\report_guardrails.py
 ```
 
 The evaluation gate exits non-zero when the guardrail evaluation is below `evaluation.minimum_pass_rate` in `config/config.json`. It currently **fails**, because the keyword guardrail catches only 13 of 30 attacks. See [EVALUATION_REPORT.md](EVALUATION_REPORT.md).
@@ -78,11 +93,11 @@ The evaluation gate exits non-zero when the guardrail evaluation is below `evalu
 docker compose up --build
 ```
 
-Starts the app on :8000, Prometheus on :9090 and Grafana on :3000 (anonymous login is disabled; use Grafana's default `admin` account and change the password on first login). Ollama runs on the host and is reached through `host.docker.internal`.
+Defines the app on :8000, four FastMCP services, Prometheus on :9090 and Grafana on :3000. Docker Compose has not been verified on this machine. Ollama runs on the host and is reached through `host.docker.internal`.
 
 ## Generated files
 
-Everything the apps write goes to `data/output` (git-ignored): knowledge, retrieval results, plans, drafts, leads, feedback, lessons, approval records and the evaluation report. Delete the folder contents to reset.
+Everything the apps write goes to `data/output` (git-ignored): knowledge, retrieval results, FastEmbed cache, plans, drafts, leads, feedback, lessons, approval records and SQLite workflow checkpoints. Delete the folder contents to reset.
 
 ## Troubleshooting
 

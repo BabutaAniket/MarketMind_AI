@@ -143,8 +143,20 @@ def detect_risks(text: str) -> dict[str, list[str]]:
 
 def redact_pii(text: str) -> str:
     text = re.sub(r"[\w.+-]+@[\w-]+\.[\w.-]+", "[EMAIL_REDACTED]", text)
-    text = re.sub(r"(?<!\d)(?:\+?91[-\s]?)?[6-9]\d{9}(?!\d)", "[PHONE_REDACTED]", text)
+    text = re.sub(r"(?<!\d)(?:\+?91[-\s]?)?[6-9]\d{4}[-\s]?\d{5}(?!\d)", "[PHONE_REDACTED]", text)
     return text
+
+
+def sanitize_data(value):
+    if isinstance(value, str):
+        return redact_pii(value)
+    if isinstance(value, list):
+        return [sanitize_data(item) for item in value]
+    if isinstance(value, tuple):
+        return [sanitize_data(item) for item in value]
+    if isinstance(value, dict):
+        return {key: sanitize_data(item) for key, item in value.items()}
+    return value
 
 
 def check_input(text: str) -> dict:

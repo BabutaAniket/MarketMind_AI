@@ -4,9 +4,29 @@
     "provider": "ollama",
     "ollama_url": "http://localhost:11434/api/chat",
     "ollama_model": "qwen3:4b",
+    "openrouter_model": "",
     "temperature": 0.2,
     "timeout_seconds": 2000,
     "num_predict": 700
+  },
+  "litellm": {
+    "fallback_between_routes": false,
+    "routes": {
+      "ollama": {
+        "model": "ollama_chat/{model}",
+        "api_base": "http://localhost:11434"
+      },
+      "retrieval": {
+        "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+        "rrf_k": 60,
+        "vector_score_threshold": 0.18,
+        "reranker": "content_word_overlap",
+        "query_expansion": true
+      },
+      "openrouter": {
+        "model_prefix": "openrouter/"
+      }
+    }
   },
   "safety": {
     "publish_allowed": false,
@@ -19,4 +39,3 @@
     "held_out_cases_required": 20
   }
 }
-

@@ -45,3 +45,8 @@ def load_approved_lessons(path: Path = LESSONS_FILE, limit: int = 10) -> list[di
 def lesson_matches(lesson: dict, query: str) -> bool:
     haystack = json.dumps(lesson, ensure_ascii=False).lower()
     return any(token in haystack for token in query.lower().split() if len(token) > 3)
+
+
+def relevant_approved_lessons(query: str, limit: int = 5) -> list[dict]:
+    candidates = load_approved_lessons(limit=1000)
+    return [lesson for lesson in candidates if lesson_matches(lesson, query)][-limit:]

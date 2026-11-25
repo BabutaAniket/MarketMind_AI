@@ -1,0 +1,30 @@
+{"query_id":"rq001","query":"What is the synthetic company called?","expected_chunk_ids":["profile:company_name","source_text:1"]}
+{"query_id":"rq002","query":"What is the task board brand name?","expected_chunk_ids":["profile:brand_name","source_text:1"]}
+{"query_id":"rq003","query":"What kind of product is Cedarline Board?","expected_chunk_ids":["profile:products","source_text:1"]}
+{"query_id":"rq004","query":"Which teams is the product designed for?","expected_chunk_ids":["profile:target_customer","source_text:1"]}
+{"query_id":"rq005","query":"What coordination problem does it address?","expected_chunk_ids":["profile:customer_problem","source_text:1"]}
+{"query_id":"rq006","query":"Where do tasks and owners appear together?","expected_chunk_ids":["profile:usp","source_text:2"]}
+{"query_id":"rq007","query":"Can a teammate assign a task owner?","expected_chunk_ids":["source_text:1","profile:usp"]}
+{"query_id":"rq008","query":"Can someone add a due date to a task?","expected_chunk_ids":["source_text:1","profile:usp"]}
+{"query_id":"rq009","query":"How is task progress represented?","expected_chunk_ids":["source_text:1","profile:usp"]}
+{"query_id":"rq010","query":"What does the shared board show?","expected_chunk_ids":["profile:usp","source_text:2"]}
+{"query_id":"rq011","query":"What call to action is in the demo profile?","expected_chunk_ids":["profile:offer_price","source_text:2"]}
+{"query_id":"rq012","query":"What product walkthrough can a team request?","expected_chunk_ids":["profile:offer_price","source_text:2"]}
+{"query_id":"rq013","query":"What price can marketing state?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq014","query":"Does Cedarline Board integrate with calendar software?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq015","query":"Which security certifications are verified?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq016","query":"What uptime guarantee can be advertised?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq017","query":"Can we promise a productivity increase?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq018","query":"What tone should the copy use?","expected_chunk_ids":["profile:tone"]}
+{"query_id":"rq019","query":"Where is this service available?","expected_chunk_ids":["profile:location"]}
+{"query_id":"rq020","query":"What is the workspace or board called?","expected_chunk_ids":["profile:brand_name","source_text:1"]}
+{"query_id":"rq021","query":"Which company name should appear in the campaign?","expected_chunk_ids":["profile:company_name","source_text:1"]}
+{"query_id":"rq022","query":"How can teams see task responsibility and deadlines?","expected_chunk_ids":["profile:usp","source_text:1","source_text:2"]}
+{"query_id":"rq023","query":"What functionality is described for creating tasks?","expected_chunk_ids":["profile:products","source_text:1"]}
+{"query_id":"rq024","query":"Which claims are explicitly not supported by this demo source?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq025","query":"Who is the intended user group coordinating shared work?","expected_chunk_ids":["profile:target_customer","source_text:1"]}
+{"query_id":"rq026","query":"Why might a team want one shared task board instead of separate notes?","expected_chunk_ids":["profile:customer_problem","source_text:1"]}
+{"query_id":"rq027","query":"What can a team member do with one task?","expected_chunk_ids":["source_text:1"]}
+{"query_id":"rq028","query":"Is the board a mobile app or a web-based product?","expected_chunk_ids":["profile:products","source_text:1"]}
+{"query_id":"rq029","query":"Are customer counts and productivity outcomes proven?","expected_chunk_ids":["profile:restrictions","source_text:2"]}
+{"query_id":"rq030","query":"What approved next step can interested teams take?","expected_chunk_ids":["profile:offer_price","source_text:2"]}

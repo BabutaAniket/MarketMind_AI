@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+from marketmind.guardrails import sanitize_data
 from marketmind.memory_store import append_jsonl
 from marketmind.settings import FEEDBACK_FILE, LESSONS_FILE
 
@@ -21,9 +22,9 @@ def build_feedback_record(plan: dict, decision: str, raw_input: str, corrected_m
         "recorded_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "decision": decision,
         "human_approved": decision == "approved",
-        "raw_input": raw_input.strip(),
-        "corrected_meaning": corrected_meaning.strip(),
-        "lesson": lesson.strip(),
+        "raw_input": sanitize_data(raw_input.strip()),
+        "corrected_meaning": sanitize_data(corrected_meaning.strip()),
+        "lesson": sanitize_data(lesson.strip()),
         "draft": extract_draft(plan),
         "source_references": plan.get("source_references", []),
     }

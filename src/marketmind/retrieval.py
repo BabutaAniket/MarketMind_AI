@@ -1,4 +1,4 @@
-"""Source-aware chunking and hybrid BM25 + TF-IDF retrieval."""
+"""Source-aware BM25 and FastEmbed vector retrieval with Reciprocal Rank Fusion."""
 
 from __future__ import annotations
 
@@ -6,8 +6,13 @@ import math
 import re
 from collections import Counter
 from datetime import datetime
+from functools import lru_cache
 
-from marketmind.settings import KNOWLEDGE_FILE
+from fastembed import TextEmbedding
+from qdrant_client import QdrantClient, models
+from rank_bm25 import BM25Okapi
+
+from marketmind.settings import KNOWLEDGE_FILE, OUTPUT_DIR, load_config
 
 STOP_WORDS = {
     "a",
@@ -147,11 +152,11 @@ def build_index(knowledge: dict) -> dict:
         "built_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "source_knowledge_file": str(KNOWLEDGE_FILE),
         "retrieval": {
-            "method": "hybrid_bm25_tfidf",
-            "bm25_weight": 0.60,
-            "vector_weight": 0.40,
-            "vector_method": "tfidf_cosine_baseline",
-            "reranker": "not_yet_added",
+            "method": "bm25_qdrant_rrf",
+            "vector_method": load_config()
+            .get("retrieval", {})
+            .get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2"),
+            "reranker": "content_word_overlap",
         },
         "stats": {
             "document_count": len(chunks),
@@ -221,13 +226,28 @@ def search_index(index: dict, query: str, top_k: int = 5) -> list[dict]:
     if not query_tokens:
         return []
 
-    raw_bm25 = [bm25_score(query_tokens, item["tokens"], index) for item in index["chunks"]]
-    raw_vector = [tfidf_cosine(query_tokens, item["tokens"], index) for item in index["chunks"]]
-    bm25_scores = normalise(raw_bm25)
-    vector_scores = normalise(raw_vector)
+    chunks = index["chunks"]
+    bm25_scores = BM25Okapi([item["tokens"] for item in chunks]).get_scores(query_tokens).tolist()
+    bm25_order = sorted(range(len(chunks)), key=lambda position: bm25_scores[position], reverse=True)
+    vector_order, vector_scores = _qdrant_vector_search(chunks, query)
+    rrf_k = int(load_config().get("retrieval", {}).get("rrf_k", 60))
+    vector_threshold = float(load_config().get("retrieval", {}).get("vector_score_threshold", 0.18))
+    bm25_ranks = {position: rank for rank, position in enumerate(bm25_order, start=1)}
+    vector_ranks = {position: rank for rank, position in enumerate(vector_order, start=1)}
+    rrf_scores = {
+        position: (1 / (rrf_k + bm25_ranks[position])) + (1 / (rrf_k + vector_ranks[position]))
+        for position in range(len(chunks))
+    }
+
+    original_terms = set(tokenize(query))
+    rerank_scores = {
+        position: rrf_scores[position] + 0.001 * len(original_terms & set(chunks[position]["tokens"]))
+        for position in range(len(chunks))
+    }
+    positions = sorted(rerank_scores, key=rerank_scores.get, reverse=True)
     results = []
-    for item, bm25, vector, raw_b, raw_v in zip(index["chunks"], bm25_scores, vector_scores, raw_bm25, raw_vector):
-        hybrid = 0.60 * bm25 + 0.40 * vector
+    for position in positions:
+        item = chunks[position]
         results.append(
             {
                 "chunk_id": item["chunk_id"],
@@ -235,14 +255,79 @@ def search_index(index: dict, query: str, top_k: int = 5) -> list[dict]:
                 "source_type": item["source_type"],
                 "source_ref": item["source_ref"],
                 "source_date": item["source_date"],
-                "score": round(hybrid, 6),
-                "bm25_score": round(raw_b, 6),
-                "vector_score": round(raw_v, 6),
+                "score": round(rerank_scores[position], 8),
+                "rrf_score": round(rrf_scores[position], 8),
+                "bm25_rank": bm25_ranks[position],
+                "vector_rank": vector_ranks[position],
+                "bm25_score": round(float(bm25_scores[position]), 6),
+                "vector_score": round(float(vector_scores[position]), 6),
             }
         )
-    results.sort(key=lambda item: item["score"], reverse=True)
-    relevant = [item for item in results if item["score"] > 0]
-    return relevant[: max(1, top_k)]
+    return [result for result in results if result["bm25_score"] > 0 or result["vector_score"] >= vector_threshold][
+        : max(1, top_k)
+    ]
+
+
+def search_index_baseline(index: dict, query: str, top_k: int = 5) -> list[dict]:
+    """Reproduce the original weighted BM25 + TF-IDF ranking for before/after measurement."""
+    query_tokens = expand_query(query)
+    if not query_tokens:
+        return []
+    chunks = index["chunks"]
+    raw_bm25 = [bm25_score(query_tokens, item["tokens"], index) for item in chunks]
+    raw_vector = [tfidf_cosine(query_tokens, item["tokens"], index) for item in chunks]
+    bm25_scores = normalise(raw_bm25)
+    vector_scores = normalise(raw_vector)
+    rows = []
+    for position, item in enumerate(chunks):
+        score = 0.60 * bm25_scores[position] + 0.40 * vector_scores[position]
+        rows.append(
+            {
+                "chunk_id": item["chunk_id"],
+                "score": score,
+                "bm25_score": raw_bm25[position],
+                "vector_score": raw_vector[position],
+            }
+        )
+    rows.sort(key=lambda row: row["score"], reverse=True)
+    return [row for row in rows if row["score"] > 0][: max(1, top_k)]
+
+
+@lru_cache(maxsize=1)
+def _embedding_model() -> TextEmbedding:
+    model_name = load_config().get("retrieval", {}).get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
+    return TextEmbedding(model_name=model_name, cache_dir=str(OUTPUT_DIR / "fastembed_cache"))
+
+
+def _qdrant_vector_search(chunks: list[dict], query: str) -> tuple[list[int], list[float]]:
+    model = _embedding_model()
+    vectors = [vector.tolist() for vector in model.embed([chunk["text"] for chunk in chunks])]
+    query_vector = next(model.query_embed(query)).tolist()
+    client = QdrantClient(location=":memory:")
+    collection = "company_knowledge"
+    client.create_collection(
+        collection_name=collection,
+        vectors_config=models.VectorParams(size=len(query_vector), distance=models.Distance.COSINE),
+    )
+    client.upsert(
+        collection_name=collection,
+        points=[
+            models.PointStruct(id=position, vector=vector, payload={"position": position})
+            for position, vector in enumerate(vectors)
+        ],
+    )
+    response = client.query_points(
+        collection_name=collection,
+        query=query_vector,
+        limit=len(chunks),
+        with_payload=True,
+    )
+    client.close()
+    order = [int(point.payload["position"]) for point in response.points]
+    scores = [0.0] * len(chunks)
+    for point in response.points:
+        scores[int(point.payload["position"])] = float(point.score)
+    return order, scores
 
 
 def format_results(query: str, results: list[dict]) -> str:

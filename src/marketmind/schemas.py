@@ -28,6 +28,19 @@ class CampaignRequest(BaseModel):
     tone: str = "Professional, clear, trustworthy"
     budget: str = "Small test budget"
     use_llm: bool = False
+    design: Literal["fixed", "single", "team"] = "team"
+
+
+class WorkflowStart(BaseModel):
+    campaign: CampaignRequest
+    thread_id: str | None = None
+
+
+class WorkflowResume(BaseModel):
+    decision: Literal["approve", "edit", "reject"]
+    payload_hash: str = ""
+    edited_payload: dict[str, Any] | None = None
+    reviewer: str = "human"
 
 
 class DraftRequest(BaseModel):

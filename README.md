@@ -18,8 +18,10 @@ The browser opens at <http://127.0.0.1:8000>. Click **Load sample company**, the
 |---|---|
 | Web app (FastAPI + browser UI) | `src/marketmind/api`, `src/marketmind/web/static` |
 | Desktop apps (Tkinter) | `apps/desktop` |
-| Core logic: ingestion, retrieval, planning, drafts, leads, feedback, evaluation | `src/marketmind` |
-| Tools: knowledge search, records, approval-gated actions | `src/marketmind/tools` |
+| Core logic: ingestion, hybrid retrieval, planning, drafts, leads, feedback, evaluation | `src/marketmind` |
+| LangGraph workflow, SQLite checkpoint and approval interrupt | `src/marketmind/workflow.py` |
+| FastMCP knowledge, records, checks and actions servers | `src/marketmind/mcp` |
+| Tool allowlists, call budget and scrubbed audit summaries | `src/marketmind/tools/gateway.py` |
 | Guardrails and specialist agents | `src/marketmind/guardrails.py`, `agents.py`, `orchestrator.py` |
 | Evaluation sets and set generator | `eval` |
 | Tests and CI gate | `tests`, `scripts/eval_gate.py`, `.github/workflows/ci.yml` |
@@ -32,7 +34,9 @@ The browser opens at <http://127.0.0.1:8000>. Click **Load sample company**, the
 MarketMind_AI/
 ├── src/marketmind/        application package
 │   ├── api/               FastAPI app
-│   ├── tools/             knowledge, records, actions
+│   ├── mcp/               four FastMCP server entry points
+│   ├── tools/             logic, gateway and approval records
+│   ├── workflow.py        LangGraph graph and SQLite checkpoint
 │   └── web/static/        browser UI
 ├── apps/desktop/          Tkinter apps (same logic as the web app)
 ├── config/                config.json, Prometheus, alerts, Grafana
@@ -40,7 +44,7 @@ MarketMind_AI/
 │   ├── input/             source documents
 │   ├── sample/            synthetic sample company
 │   └── output/            generated files (git-ignored)
-├── eval/                  golden set, red-team set, generator
+├── eval/                  golden set, red-team set, retrieval labels/report
 ├── docs/                  setup, architecture, policies, reports
 ├── scripts/               Ollama check, CI evaluation gate
 └── tests/
@@ -48,7 +52,7 @@ MarketMind_AI/
 
 ## Status
 
-This is a working prototype, not a finished capstone. See [docs/GUIDELINE_STATUS.md](docs/GUIDELINE_STATUS.md) for what meets the guidelines and what is still pending.
+This is a working prototype, not a finished capstone. Local workflow, FastMCP tools and retrieval benchmarks are now implemented and tested. The campaign evaluation gate still fails; held-out experiments, judge calibration, real model use, authentication and Docker verification remain pending. See [docs/GUIDELINE_STATUS.md](docs/GUIDELINE_STATUS.md).
 
 ## Safety boundary
 

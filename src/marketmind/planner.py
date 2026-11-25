@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-from marketmind.memory_store import load_approved_lessons
-from marketmind.settings import load_config
+from marketmind.llm_client import chat
+from marketmind.memory_store import relevant_approved_lessons
+from marketmind.settings import PROMPTS_FILE, load_config
 
 _LLM_CONFIG = load_config()["llm"]
 OLLAMA_URL = _LLM_CONFIG.get("ollama_url", "http://localhost:11434/api/chat")
@@ -171,64 +170,42 @@ def build_campaign_plan(
 
 def ask_local_qwen(plan: dict) -> dict | str:
     evidence = plan.get("source_references", [])[:5]
-    approved_lessons = load_approved_lessons(limit=5)
-    prompt = f"""
-You are the local content specialist for MarketMind AI.
-Create a practical campaign draft using ONLY the verified context and evidence below.
-Do not invent certifications, prices, performance claims, customers, or guarantees.
-If information is missing, write 'needs human confirmation'.
-Return valid JSON only with these keys:
-campaign_summary, audience_message, channel_drafts, lead_capture_script, human_review_notes.
-channel_drafts must be an array. Make one short draft for each requested channel.
-Each channel draft must contain channel, draft, call_to_action, and claims_to_verify.
-Treat the approved lessons below as style and safety guidance, not as factual evidence.
-Use facts only from the current campaign context and source evidence.
-
-CAMPAIGN CONTEXT:
-{
-        json.dumps(
-            {
-                "inputs": plan.get("inputs", {}),
-                "company_context": plan.get("company_context", {}),
-                "channel_plan": plan.get("channel_plan", []),
-                "evidence": evidence,
-                "approved_human_lessons": approved_lessons,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+    lesson_query = " ".join(
+        [
+            str(plan.get("inputs", {}).get("objective", "")),
+            str(plan.get("inputs", {}).get("audience", "")),
+            str(plan.get("inputs", {}).get("channels", "")),
+            str(plan.get("company_context", {}).get("tone", "")),
+        ]
+    )
+    approved_lessons = relevant_approved_lessons(lesson_query, limit=5)
+    prompt_config = json.loads(PROMPTS_FILE.read_text(encoding="utf-8"))["campaign_drafter"]
+    system = "\n".join(
+        [
+            f"Role: {prompt_config['role']}",
+            f"Context: {prompt_config['context']}",
+            f"Task: {prompt_config['task']}",
+            "Constraints:",
+            *[f"- {item}" for item in prompt_config["constraints"]],
+            f"Format: {prompt_config['format']}",
+            f"Examples: {json.dumps(prompt_config['examples'], ensure_ascii=False)}",
+        ]
+    )
+    context = {
+        "inputs": plan.get("inputs", {}),
+        "company_context": plan.get("company_context", {}),
+        "channel_plan": plan.get("channel_plan", []),
+        "evidence": evidence,
+        "approved_human_lessons": approved_lessons,
     }
-""".strip()
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": "You are a careful marketing assistant. Output JSON only."},
-            {"role": "user", "content": prompt},
+    content = chat(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(context, ensure_ascii=False, indent=2)},
         ],
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0.2},
-    }
-    request = Request(
-        OLLAMA_URL,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
+        json_mode=True,
     )
     try:
-        with urlopen(request, timeout=OLLAMA_TIMEOUT) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Ollama HTTP {exc.code}: {detail[:500]}") from exc
-    except URLError as exc:
-        raise RuntimeError("Ollama is not reachable. Open Ollama and check that qwen3:4b is installed.") from exc
-
-    content = result.get("message", {}).get("content", "").strip()
-    if not content:
-        raise RuntimeError("Ollama returned an empty response.")
-    try:
         return json.loads(content)
-    except json.JSONDecodeError:
-        return content
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("LLM provider returned invalid JSON despite JSON mode.") from exc

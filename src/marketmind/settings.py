@@ -8,10 +8,12 @@ from pathlib import Path
 
 ROOT = Path(os.getenv("MM_ROOT", Path(__file__).resolve().parents[2]))
 CONFIG_FILE = ROOT / "config" / "config.json"
+PROMPTS_FILE = ROOT / "config" / "prompts.json"
 INPUT_DIR = ROOT / "data" / "input"
 OUTPUT_DIR = ROOT / os.getenv("DATA_DIR", "data/output")
 EVAL_DIR = ROOT / "eval"
 SAMPLE_FILE = ROOT / "data" / "sample" / "sample_company.json"
+CHECKPOINT_FILE = OUTPUT_DIR / "workflow-checkpoints.sqlite"
 STATIC_DIR = Path(__file__).resolve().parent / "web" / "static"
 KNOWLEDGE_FILE = OUTPUT_DIR / "knowledge_base.json"
 INDEX_FILE = OUTPUT_DIR / "retrieval_index.json"

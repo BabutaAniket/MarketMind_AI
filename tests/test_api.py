@@ -26,6 +26,9 @@ def test_health_and_homepage():
     page = client.get("/")
     assert page.status_code == 200 and "MarketMind AI" in page.text
     assert client.get("/static/app.js").status_code == 200
+    favicon = client.get("/static/favicon.svg")
+    assert favicon.status_code == 200 and "<svg" in favicon.text
+    assert 'href="/static/favicon.svg"' in page.text
 
 
 def test_metrics_exposed():
@@ -45,6 +48,20 @@ def test_features_need_knowledge_first():
 
 def test_empty_knowledge_is_rejected():
     assert client.post("/api/knowledge", json={"company_profile": {}, "source_text": ""}).status_code == 422
+
+
+def test_knowledge_ingestion_redacts_contact_details():
+    response = client.post(
+        "/api/knowledge",
+        json={
+            "company_profile": {"company_name": "Acme", "location": "Online"},
+            "source_text": "Contact jane@example.com or +91 98765 43210 for product details.",
+        },
+    )
+    assert response.status_code == 200
+    assert "pii_redacted" in response.json()["warnings"]
+    stored = client.get("/api/knowledge").json()["source_text"]
+    assert "jane@example.com" not in stored and "98765 43210" not in stored
 
 
 def test_source_text_injection_is_warned_but_sample_is_clean(sample):
@@ -117,3 +134,17 @@ def test_evaluation_endpoint_reports_scope():
     assert report["golden_cases"] >= 60 and report["red_team_cases"] >= 30
     assert "input guardrail only" in report["scope"]
     assert client.get("/api/evaluation/report").status_code == 200
+
+
+def test_retrieval_evaluation_endpoint_saves_report(tmp_path, monkeypatch):
+    report = {
+        "query_count": 30,
+        "before": {"recall": 0.7},
+        "after": {"recall": 0.8},
+        "change": 0.1,
+    }
+    monkeypatch.setattr("marketmind.api.app.run_retrieval_evaluation", lambda: report)
+    monkeypatch.setattr("marketmind.api.app.EVAL_DIR", tmp_path)
+    response = client.post("/api/evaluation/retrieval")
+    assert response.status_code == 200 and response.json() == report
+    assert (tmp_path / "retrieval_report.json").exists()
