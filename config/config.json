@@ -1,0 +1,22 @@
+{
+  "project_name": "MarketMind AI",
+  "llm": {
+    "provider": "ollama",
+    "ollama_url": "http://localhost:11434/api/chat",
+    "ollama_model": "qwen3:4b",
+    "temperature": 0.2,
+    "timeout_seconds": 2000,
+    "num_predict": 700
+  },
+  "safety": {
+    "publish_allowed": false,
+    "auto_message_allowed": false,
+    "human_approval_required": true,
+    "max_tool_calls": 12
+  },
+  "evaluation": {
+    "minimum_pass_rate": 0.85,
+    "held_out_cases_required": 20
+  }
+}
+

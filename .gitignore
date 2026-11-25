@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+data/output/*
+!data/output/.gitkeep
+eval/generation_progress.json
+eval/generation_debug.log
+prometheus_data/

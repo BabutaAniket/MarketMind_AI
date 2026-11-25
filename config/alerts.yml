@@ -1,0 +1,18 @@
+groups:
+  - name: marketmind
+    rules:
+      - alert: AppDown
+        expr: up{job="marketmind-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: MarketMind app is not reachable
+
+      - alert: HighServerErrorRate
+        expr: sum(rate(marketmind_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 0.1 server errors per second for 2 minutes

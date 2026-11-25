@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MarketMind AI</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>MarketMind AI</h1>
+      <p>Grounded campaign planning with human approval. Nothing is published externally.</p>
+    </div>
+    <div id="status" class="pills" aria-live="polite"></div>
+  </header>
+
+  <nav id="tabs" role="tablist"></nav>
+
+  <main>
+    <section id="company" data-title="1. Company">
+      <h2>Company knowledge</h2>
+      <div class="row">
+        <button id="load-sample" class="secondary">Load sample company</button>
+        <label class="secondary file">Import .txt / .md / .json / .csv<input id="import-file" type="file" accept=".txt,.md,.json,.csv"></label>
+      </div>
+      <form id="company-form"></form>
+      <label>Source text <textarea id="source-text" rows="8" placeholder="Paste approved product and company information"></textarea></label>
+      <button id="save-company">Save knowledge</button>
+      <div id="company-out" class="out"></div>
+    </section>
+
+    <section id="search" data-title="2. Search">
+      <h2>Evidence search</h2>
+      <div class="row">
+        <input id="query" value="What are the main customer benefits?">
+        <button id="run-search">Search</button>
+      </div>
+      <div id="search-out" class="out"></div>
+    </section>
+
+    <section id="campaign" data-title="3. Campaign">
+      <h2>Campaign plan</h2>
+      <form id="campaign-form" class="grid">
+        <label>Objective <input name="objective" value="Generate qualified leads"></label>
+        <label>Audience <input name="audience" value="Business decision-makers in India"></label>
+        <label>Offer <input name="offer" value="Book a product consultation"></label>
+        <label>Channels <input name="channels" value="Instagram, Facebook, WhatsApp, Email"></label>
+        <label>Tone <input name="tone" value="Professional, clear, trustworthy"></label>
+        <label>Budget <input name="budget" value="Small test budget"></label>
+      </form>
+      <label class="check"><input type="checkbox" id="use-llm"> Also generate drafts with the local model (Ollama)</label>
+      <button id="run-plan">Create plan</button>
+      <ol id="plan-steps" class="steps"></ol>
+      <div id="plan-out" class="out"></div>
+    </section>
+
+    <section id="drafts" data-title="4. Drafts">
+      <h2>Channel drafts</h2>
+      <div class="grid">
+        <label>Campaign goal <input id="goal" placeholder="Create awareness and invite a consultation"></label>
+        <label>Call to action <input id="cta" placeholder="Request a product consultation"></label>
+      </div>
+      <button id="run-drafts">Generate drafts</button>
+      <div id="drafts-out" class="cards"></div>
+    </section>
+
+    <section id="leads" data-title="5. Leads">
+      <h2>Lead qualification</h2>
+      <form id="lead-form" class="grid"></form>
+      <div class="row">
+        <button id="score-lead" class="secondary">Score lead</button>
+        <button id="prepare-lead">Prepare save for approval</button>
+      </div>
+      <div id="lead-out" class="out"></div>
+      <h3>Saved leads</h3>
+      <div id="lead-list" class="out"></div>
+    </section>
+
+    <section id="approvals" data-title="6. Approvals">
+      <h2>Approval queue</h2>
+      <p class="hint">Approval applies to the exact payload shown. Editing a payload requires a new approval.</p>
+      <button id="refresh-actions" class="secondary">Refresh</button>
+      <div id="actions-out" class="cards"></div>
+    </section>
+
+    <section id="feedback" data-title="7. Feedback">
+      <h2>Human feedback</h2>
+      <p class="hint">Approved lessons guide later local-model prompts. Rejected drafts are kept for audit only.</p>
+      <label>Original request <input id="fb-raw"></label>
+      <label>Corrected meaning <input id="fb-corrected"></label>
+      <label>Lesson <textarea id="fb-lesson" rows="3"></textarea></label>
+      <div class="row">
+        <button id="fb-approve">Approve and save lesson</button>
+        <button id="fb-reject" class="secondary">Reject (audit only)</button>
+      </div>
+      <div id="fb-out" class="out"></div>
+    </section>
+
+    <section id="evaluation" data-title="8. Evaluation">
+      <h2>Guardrail evaluation</h2>
+      <p class="hint">Runs the input guardrail on the golden set and the red-team set. It does not score agent output quality.</p>
+      <button id="run-eval">Run evaluation</button>
+      <div id="eval-out" class="out"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

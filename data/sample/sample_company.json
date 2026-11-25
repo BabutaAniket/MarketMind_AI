@@ -1,0 +1,16 @@
+{
+  "note": "Synthetic sample for demos and tests. Not verified company information.",
+  "company_profile": {
+    "company_name": "MOSETA Solar AC (sample)",
+    "brand_name": "MOSETA Solar AC",
+    "products": "Solar-hybrid air conditioners",
+    "target_customer": "Homes, offices, schools, banks and institutions",
+    "customer_problem": "High electricity bills and unreliable cooling",
+    "usp": "Energy-efficient cooling with solar-hybrid operation",
+    "offer_price": "Request a product consultation",
+    "location": "India",
+    "tone": "Professional, clear and trustworthy",
+    "restrictions": "Avoid guaranteed savings, exact bill-reduction percentages, warranty terms and competitor comparisons"
+  },
+  "source_text": "MOSETA Solar AC\nEnergy-efficient air conditioner for homes, offices and institutions.\nKey benefits: lower electricity consumption, reliable cooling, green technology and professional support.\nCustomer problem: high electricity bills and unreliable cooling.\nCall to action: request a product consultation.\nAvoid unsupported medical, financial or guaranteed-saving claims."
+}
