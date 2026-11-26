@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — MarketMind AI</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="auth-page">
+  <main class="auth-shell">
+    <section class="auth-card">
+      <a class="auth-brand" href="/login">MarketMind AI</a>
+      <p class="auth-intro">Sign in to your private workspace, or create an account to get started.</p>
+      <div class="auth-switch" role="tablist" aria-label="Account options">
+        <button id="show-login" class="auth-tab selected" type="button">Sign in</button>
+        <button id="show-register" class="auth-tab" type="button">Create account</button>
+      </div>
+      <form id="auth-form">
+        <label>Email
+          <input name="email" type="email" autocomplete="email" required maxlength="254">
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" required minlength="12">
+        </label>
+        <p id="password-hint" class="auth-hint" hidden>Use at least 12 characters.</p>
+        <button id="auth-submit" type="submit">Sign in</button>
+      </form>
+      <div id="auth-message" class="auth-message" role="status" aria-live="polite"></div>
+      <p class="auth-footnote">Each account has its own saved company information and records.</p>
+    </section>
+  </main>
+  <script src="/static/auth.js"></script>
+</body>
+</html>

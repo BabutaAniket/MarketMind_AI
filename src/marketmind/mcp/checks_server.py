@@ -16,7 +16,7 @@ mcp = FastMCP(
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 )
-def check_campaign_request(text: str) -> dict:
+def check_campaign_request(text: str, workspace_id: str | None = None) -> dict:
     """Check request text for known prompt injection and unsafe instructions."""
     if len(text) > 20_000:
         return {"ok": False, "error": "text exceeds 20000 characters"}
@@ -26,7 +26,7 @@ def check_campaign_request(text: str) -> dict:
 @mcp.tool(
     annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 )
-def check_marketing_copy(text: str) -> dict:
+def check_marketing_copy(text: str, workspace_id: str | None = None) -> dict:
     """Check marketing copy for phrases on the current forbidden-claim list."""
     if len(text) > 20_000:
         return {"ok": False, "error": "text exceeds 20000 characters"}

@@ -12,7 +12,7 @@ from datetime import datetime
 from uuid import uuid4
 
 from marketmind.memory_store import read_json, write_json
-from marketmind.settings import ACTIONS_FILE
+from marketmind.settings import workspace_file
 from marketmind.tools.records import add_lead
 
 ACTION_TYPES = ("publish_draft", "send_message", "write_lead", "save_note")
@@ -24,7 +24,8 @@ def payload_hash(payload: dict) -> str:
 
 
 def _load() -> dict:
-    return read_json(ACTIONS_FILE) if ACTIONS_FILE.exists() else {}
+    path = workspace_file("actions.json")
+    return read_json(path) if path.exists() else {}
 
 
 def _now() -> str:
@@ -49,7 +50,7 @@ def prepare_action(action_type: str, payload: dict) -> dict:
     }
     actions = _load()
     actions[action["action_id"]] = action
-    write_json(ACTIONS_FILE, actions)
+    write_json(workspace_file("actions.json"), actions)
     return {"ok": True, "read_only": False, **action}
 
 
@@ -93,7 +94,7 @@ def decide_action(
         return _fail("decision must be approve, edit or reject")
 
     actions[action_id] = action
-    write_json(ACTIONS_FILE, actions)
+    write_json(workspace_file("actions.json"), actions)
     return {"ok": True, **action}
 
 

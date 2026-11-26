@@ -8,7 +8,7 @@ from typing import Any
 
 from fastmcp import Client, FastMCP
 
-from marketmind.settings import load_config
+from marketmind.settings import current_workspace_id, load_config
 
 TOOL_ALLOWLIST = {
     "research": {"search_company_knowledge", "get_company_passage"},
@@ -35,6 +35,9 @@ def invoke_tool(
         raise PermissionError(f"Tool-call budget of {budget} is exhausted.")
 
     async def call() -> dict[str, Any]:
+        workspace_id = current_workspace_id()
+        if workspace_id is not None:
+            arguments["workspace_id"] = workspace_id
         async with Client(server) as client:
             response = await client.call_tool(tool_name, arguments, raise_on_error=False)
             data = response.structured_content

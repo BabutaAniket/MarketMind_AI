@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
+from typing import Iterator
+from uuid import UUID
 
 ROOT = Path(os.getenv("MM_ROOT", Path(__file__).resolve().parents[2]))
 CONFIG_FILE = ROOT / "config" / "config.json"
 PROMPTS_FILE = ROOT / "config" / "prompts.json"
 INPUT_DIR = ROOT / "data" / "input"
 OUTPUT_DIR = ROOT / os.getenv("DATA_DIR", "data/output")
+_workspace_id: ContextVar[str | None] = ContextVar("marketmind_workspace_id", default=None)
 EVAL_DIR = ROOT / "eval"
 SAMPLE_FILE = ROOT / "data" / "sample" / "sample_company.json"
 CHECKPOINT_FILE = OUTPUT_DIR / "workflow-checkpoints.sqlite"
@@ -29,6 +34,34 @@ ACTIONS_FILE = OUTPUT_DIR / "actions.json"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@contextmanager
+def workspace_scope(workspace_id: str | None) -> Iterator[None]:
+    if workspace_id is not None:
+        workspace_id = UUID(workspace_id).hex
+    token = _workspace_id.set(workspace_id)
+    try:
+        yield
+    finally:
+        _workspace_id.reset(token)
+
+
+def current_workspace_id() -> str | None:
+    return _workspace_id.get()
+
+
+def workspace_output_dir() -> Path:
+    workspace_id = current_workspace_id()
+    if workspace_id is None:
+        return OUTPUT_DIR
+    directory = OUTPUT_DIR / "users" / workspace_id
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def workspace_file(name: str) -> Path:
+    return workspace_output_dir() / name
+
+
 def load_config() -> dict:
     config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
     llm = config.setdefault("llm", {})
@@ -36,5 +69,5 @@ def load_config() -> dict:
     llm["ollama_url"] = os.getenv("OLLAMA_URL", llm.get("ollama_url", "http://localhost:11434/api/chat"))
     llm["ollama_model"] = os.getenv("OLLAMA_MODEL", llm.get("ollama_model", "qwen3:4b"))
     llm["openrouter_model"] = os.getenv("OPENROUTER_MODEL", llm.get("openrouter_model", ""))
-    config["output_dir"] = str(OUTPUT_DIR)
+    config["output_dir"] = str(workspace_output_dir())
     return config

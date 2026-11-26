@@ -22,7 +22,7 @@ from marketmind.mcp.records_server import mcp as records_server
 from marketmind.memory_store import read_json
 from marketmind.planner import build_campaign_plan
 from marketmind.retrieval import build_index
-from marketmind.settings import CHECKPOINT_FILE, KNOWLEDGE_FILE
+from marketmind.settings import workspace_file
 from marketmind.tools.actions import decide_action
 from marketmind.tools.gateway import configured_server, invoke_tool
 
@@ -63,13 +63,14 @@ def _after_guard(state: WorkflowState) -> Literal["research", "finish"]:
 
 
 def _research(state: WorkflowState) -> dict[str, Any]:
-    if not KNOWLEDGE_FILE.exists():
+    knowledge_file = workspace_file("knowledge_base.json")
+    if not knowledge_file.exists():
         return {
             "status": "failed",
             "errors": ["Save company knowledge before starting a campaign."],
             "events": _event(state, "research", error="company knowledge is missing"),
         }
-    knowledge = read_json(KNOWLEDGE_FILE)
+    knowledge = read_json(knowledge_file)
     request = state["request"]
     query = " ".join(str(request.get(key, "")) for key in ("objective", "audience", "offer"))
     index = build_index(knowledge)
@@ -106,7 +107,7 @@ def _after_plan(state: WorkflowState) -> Literal["fixed", "single", "team"]:
 
 def _plan(state: WorkflowState) -> dict[str, Any]:
     request = state["request"]
-    knowledge = read_json(KNOWLEDGE_FILE)
+    knowledge = read_json(workspace_file("knowledge_base.json"))
     plan = build_campaign_plan(
         knowledge,
         {"results": state.get("evidence", [])},
@@ -141,7 +142,7 @@ def _single_agent(state: WorkflowState) -> dict[str, Any]:
 
 def _content(state: WorkflowState) -> dict[str, Any]:
     request = state["request"]
-    knowledge = read_json(KNOWLEDGE_FILE)
+    knowledge = read_json(workspace_file("knowledge_base.json"))
     drafts = build_drafts(knowledge, request.get("objective", ""), request.get("offer", ""))
     return {"drafts": drafts["drafts"], "events": _event(state, "content", channels=list(drafts["drafts"]))}
 
@@ -395,9 +396,10 @@ def invoke_workflow(
     thread_id: str | None = None,
     resume: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_file = workspace_file("workflow-checkpoints.sqlite")
+    checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
     config = {"configurable": {"thread_id": thread_id or str(uuid4())}}
-    with SqliteSaver.from_conn_string(str(CHECKPOINT_FILE)) as checkpointer:
+    with SqliteSaver.from_conn_string(str(checkpoint_file)) as checkpointer:
         graph = build_workflow(checkpointer)
         if resume is None:
             if request is None:
@@ -412,10 +414,11 @@ def invoke_workflow(
 
 
 def workflow_status(thread_id: str) -> dict[str, Any] | None:
-    if not CHECKPOINT_FILE.exists():
+    checkpoint_file = workspace_file("workflow-checkpoints.sqlite")
+    if not checkpoint_file.exists():
         return None
     config = {"configurable": {"thread_id": thread_id}}
-    with SqliteSaver.from_conn_string(str(CHECKPOINT_FILE)) as checkpointer:
+    with SqliteSaver.from_conn_string(str(checkpoint_file)) as checkpointer:
         state = build_workflow(checkpointer).get_state(config)
     if not state.values:
         return None

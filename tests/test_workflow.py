@@ -1,11 +1,21 @@
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 from marketmind.api.app import app
 from marketmind.settings import SAMPLE_FILE
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def signed_in_user():
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "workflow@example.com", "password": "a-very-long-workflow-password"},
+    )
+    assert response.status_code == 200
 
 
 def _save_sample() -> None:

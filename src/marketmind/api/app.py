@@ -5,14 +5,26 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterator
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from pydantic import BaseModel, Field
 
 from marketmind import __version__
+from marketmind.auth import (
+    SESSION_COOKIE,
+    AccountAlreadyExists,
+    authenticate,
+    cookie_secure,
+    create_account,
+    create_session,
+    delete_session,
+    user_for_session,
+)
 from marketmind.content import build_drafts
 from marketmind.evaluation import run_evaluation, save_report
 from marketmind.feedback import build_feedback_record, save_feedback
@@ -37,15 +49,10 @@ from marketmind.schemas import (
     WorkflowStart,
 )
 from marketmind.settings import (
-    DRAFTS_FILE,
-    EVAL_DIR,
-    KNOWLEDGE_FILE,
-    LEADS_FILE,
-    PLAN_FILE,
-    REPORT_FILE,
-    RETRIEVAL_FILE,
     SAMPLE_FILE,
     STATIC_DIR,
+    workspace_file,
+    workspace_scope,
 )
 from marketmind.tools.actions import decide_action, list_actions, prepare_action
 from marketmind.workflow import invoke_workflow, workflow_status
@@ -55,12 +62,46 @@ app = FastAPI(title="MarketMind AI", version=__version__)
 SOURCE_RISKS = {"prompt_injection", "secret_disclosure", "source_tampering", "auto_publish"}
 REQUESTS = Counter("marketmind_requests_total", "HTTP requests", ["method", "path", "status"])
 LATENCY = Histogram("marketmind_request_seconds", "HTTP request latency", ["path"])
+PUBLIC_PATHS = {"/login", "/api/auth/register", "/api/auth/login", "/health", "/metrics"}
+
+
+class Credentials(BaseModel):
+    email: str = Field(max_length=254)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 @app.middleware("http")
 async def record_metrics(request: Request, call_next):
     start = time.perf_counter()
-    response = await call_next(request)
+    path = request.url.path
+    origin = request.headers.get("origin")
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and origin:
+        expected = f"{request.url.scheme}://{request.url.netloc}"
+        parsed_origin = urlsplit(origin)
+        if f"{parsed_origin.scheme}://{parsed_origin.netloc}" != expected:
+            return Response(
+                content=json.dumps({"detail": "Cross-site request blocked."}),
+                status_code=403,
+                media_type="application/json",
+            )
+    if path not in PUBLIC_PATHS and not path.startswith("/static/"):
+        user = user_for_session(request.cookies.get(SESSION_COOKIE))
+        if user is None:
+            response = (
+                RedirectResponse("/login", status_code=303)
+                if path == "/" or path.startswith("/docs") or path.startswith("/redoc")
+                else Response(
+                    content=json.dumps({"detail": "Sign in to continue."}),
+                    status_code=401,
+                    media_type="application/json",
+                )
+            )
+            return response
+        request.state.user = user
+        with workspace_scope(user["id"]):
+            response = await call_next(request)
+    else:
+        response = await call_next(request)
     path = request.url.path if request.url.path.startswith("/api") or request.url.path == "/health" else "other"
     REQUESTS.labels(request.method, path, response.status_code).inc()
     LATENCY.labels(path).observe(time.perf_counter() - start)
@@ -79,6 +120,60 @@ def health() -> dict:
     return {"ok": True, "service": "marketmind-ai", "version": __version__, "publish_allowed": False}
 
 
+@app.get("/login")
+def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.post("/api/auth/register")
+def register(body: Credentials, response: Response) -> dict:
+    try:
+        user = create_account(body.email, body.password)
+    except AccountAlreadyExists as exc:
+        raise HTTPException(status_code=409, detail="An account with this email already exists.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    token = create_session(user["id"])
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        secure=cookie_secure(),
+        samesite="strict",
+        path="/",
+    )
+    return {"email": user["email"]}
+
+
+@app.post("/api/auth/login")
+def login(body: Credentials, response: Response) -> dict:
+    user = authenticate(body.email, body.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Email or password is incorrect.")
+    token = create_session(user["id"])
+    response.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        secure=cookie_secure(),
+        samesite="strict",
+        path="/",
+    )
+    return {"email": user["email"]}
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response) -> dict:
+    delete_session(request.cookies.get(SESSION_COOKIE))
+    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, secure=cookie_secure(), samesite="strict")
+    return {"logged_out": True}
+
+
+@app.get("/api/auth/me")
+def current_user(request: Request) -> dict:
+    return {"email": request.state.user["email"]}
+
+
 @app.get("/metrics")
 def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
@@ -86,13 +181,14 @@ def metrics() -> Response:
 
 @app.get("/api/status")
 def status() -> dict:
-    knowledge = read_json(KNOWLEDGE_FILE) if KNOWLEDGE_FILE.exists() else None
+    knowledge_file = workspace_file("knowledge_base.json")
+    plan_file = workspace_file("campaign_plan.json")
     return {
         "llm": ollama_status(),
-        "knowledge_saved": knowledge is not None,
-        "company": (knowledge or {}).get("company_profile", {}).get("company_name", ""),
-        "plan_saved": PLAN_FILE.exists(),
-        "leads": len(read_jsonl(LEADS_FILE)),
+        "knowledge_saved": knowledge_file.exists(),
+        "company": (read_json(knowledge_file) if knowledge_file.exists() else {}).get("company_profile", {}).get("company_name", ""),
+        "plan_saved": plan_file.exists(),
+        "leads": len(read_jsonl(workspace_file("leads.jsonl"))),
         "approved_lessons": len(load_approved_lessons(limit=1000)),
         "pending_actions": sum(a["status"] == "waiting_for_human_approval" for a in list_actions()),
     }
@@ -100,7 +196,8 @@ def status() -> dict:
 
 @app.get("/api/knowledge")
 def get_knowledge() -> dict:
-    saved = read_json(KNOWLEDGE_FILE) if KNOWLEDGE_FILE.exists() else {}
+    knowledge_file = workspace_file("knowledge_base.json")
+    saved = read_json(knowledge_file) if knowledge_file.exists() else {}
     return {"profile_fields": PROFILE_FIELDS, "saved": bool(saved), **saved}
 
 
@@ -116,7 +213,7 @@ def save_knowledge(body: KnowledgeInput) -> dict:
     safe_profile = sanitize_data(body.company_profile)
     safe_source = sanitize_data(body.source_text)
     record = build_record(safe_profile, safe_source)
-    write_json(KNOWLEDGE_FILE, record)
+    write_json(workspace_file("knowledge_base.json"), record)
     screen = check_input(safe_source)
     flagged = sorted(
         set(screen["risk_categories"]) & SOURCE_RISKS
@@ -137,7 +234,7 @@ def search(body: SearchRequest) -> dict:
     index = build_index(require_knowledge())
     results = search_index(index, body.query, top_k=body.top_k)
     if body.save:
-        write_json(RETRIEVAL_FILE, {"query": body.query, "results": results, "human_review_required": True})
+        write_json(workspace_file("retrieval_test_results.json"), {"query": body.query, "results": results, "human_review_required": True})
     return {"query": body.query, "chunks_indexed": len(index["chunks"]), "results": results}
 
 
@@ -174,7 +271,7 @@ def plan_events(body: CampaignRequest) -> Iterator[dict]:
             yield {"step": "llm", "status": "failed", "error": str(exc)}
         else:
             yield {"step": "llm", "status": "done"}
-    write_json(PLAN_FILE, plan)
+    write_json(workspace_file("campaign_plan.json"), plan)
     yield {"step": "done", "plan": plan}
 
 
@@ -223,13 +320,15 @@ def get_workflow(thread_id: str) -> dict:
 
 
 @app.post("/api/workflow/{thread_id}/resume")
-def resume_workflow(thread_id: str, body: WorkflowResume) -> dict:
+def resume_workflow(thread_id: str, body: WorkflowResume, request: Request) -> dict:
     state = workflow_status(thread_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Workflow not found.")
     if state.get("status") != "awaiting_approval":
         raise HTTPException(status_code=409, detail="Workflow is not waiting for approval.")
-    result = invoke_workflow(thread_id=thread_id, resume=body.model_dump())
+    decision = body.model_dump()
+    decision["reviewer"] = request.state.user["email"]
+    result = invoke_workflow(thread_id=thread_id, resume=decision)
     return _workflow_view(result)
 
 
@@ -243,13 +342,21 @@ def create_plan(body: CampaignRequest) -> dict:
 
 
 @app.post("/api/plan/stream")
-def stream_plan(body: CampaignRequest) -> StreamingResponse:
+def stream_plan(body: CampaignRequest, request: Request) -> StreamingResponse:
+    workspace_id = request.state.user["id"]
+    events = plan_events(body)
+
     def lines() -> Iterator[str]:
-        try:
-            for event in plan_events(body):
-                yield json.dumps(event, ensure_ascii=False) + "\n"
-        except HTTPException as exc:
-            yield json.dumps({"step": "blocked", "error": exc.detail}) + "\n"
+        while True:
+            try:
+                with workspace_scope(workspace_id):
+                    event = next(events)
+            except StopIteration:
+                break
+            except HTTPException as exc:
+                yield json.dumps({"step": "blocked", "error": exc.detail}) + "\n"
+                break
+            yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(lines(), media_type="application/x-ndjson")
 
@@ -259,7 +366,7 @@ def create_drafts(body: DraftRequest) -> dict:
     record = build_drafts(require_knowledge(), body.campaign_goal, body.call_to_action)
     for draft in record["drafts"].values():
         draft["compliance"] = check_output(draft["text"])
-    write_json(DRAFTS_FILE, record)
+    write_json(workspace_file("content_drafts.json"), record)
     return record
 
 
@@ -270,7 +377,7 @@ def lead_score(body: LeadInput) -> dict:
 
 @app.get("/api/leads")
 def leads() -> dict:
-    return {"leads": read_jsonl(LEADS_FILE)}
+    return {"leads": read_jsonl(workspace_file("leads.jsonl"))}
 
 
 @app.post("/api/actions/prepare")
@@ -287,8 +394,14 @@ def actions() -> dict:
 
 
 @app.post("/api/actions/decide")
-def action_decide(body: ActionDecision) -> dict:
-    result = decide_action(body.action_id, body.decision, body.payload_hash, body.edited_payload, body.reviewer)
+def action_decide(body: ActionDecision, request: Request) -> dict:
+    result = decide_action(
+        body.action_id,
+        body.decision,
+        body.payload_hash,
+        body.edited_payload,
+        request.state.user["email"],
+    )
     if not result["ok"]:
         raise HTTPException(status_code=409, detail=result["error"])
     return result
@@ -301,10 +414,11 @@ def lessons() -> dict:
 
 @app.post("/api/feedback")
 def feedback(body: FeedbackInput) -> dict:
-    if not PLAN_FILE.exists():
+    plan_file = workspace_file("campaign_plan.json")
+    if not plan_file.exists():
         raise HTTPException(status_code=409, detail="Create a campaign plan first.")
     record = build_feedback_record(
-        read_json(PLAN_FILE), body.decision, body.raw_input, body.corrected_meaning, body.lesson
+        read_json(plan_file), body.decision, body.raw_input, body.corrected_meaning, body.lesson
     )
     save_feedback(record)
     return {"saved": True, "used_for_future_prompts": record["human_approved"]}
@@ -323,15 +437,16 @@ def evaluation_run() -> dict:
 @app.post("/api/evaluation/retrieval")
 def retrieval_evaluation() -> dict:
     report = run_retrieval_evaluation()
-    write_json(EVAL_DIR / "retrieval_report.json", report)
+    write_json(workspace_file("retrieval_report.json"), report)
     return report
 
 
 @app.get("/api/evaluation/report")
 def evaluation_report() -> dict:
-    if not REPORT_FILE.exists():
+    report_file = workspace_file("evaluation_report.json")
+    if not report_file.exists():
         raise HTTPException(status_code=404, detail="No report yet.")
-    return read_json(REPORT_FILE)
+    return read_json(report_file)
 
 
 @app.get("/")

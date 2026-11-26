@@ -12,7 +12,7 @@ from fastembed import TextEmbedding
 from qdrant_client import QdrantClient, models
 from rank_bm25 import BM25Okapi
 
-from marketmind.settings import KNOWLEDGE_FILE, OUTPUT_DIR, load_config
+from marketmind.settings import load_config, workspace_file, workspace_output_dir
 
 STOP_WORDS = {
     "a",
@@ -150,7 +150,7 @@ def build_index(knowledge: dict) -> dict:
     return {
         "schema_version": "retrieval-index-1.0",
         "built_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "source_knowledge_file": str(KNOWLEDGE_FILE),
+        "source_knowledge_file": str(workspace_file("knowledge_base.json")),
         "retrieval": {
             "method": "bm25_qdrant_rrf",
             "vector_method": load_config()
@@ -296,7 +296,7 @@ def search_index_baseline(index: dict, query: str, top_k: int = 5) -> list[dict]
 @lru_cache(maxsize=1)
 def _embedding_model() -> TextEmbedding:
     model_name = load_config().get("retrieval", {}).get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
-    return TextEmbedding(model_name=model_name, cache_dir=str(OUTPUT_DIR / "fastembed_cache"))
+    return TextEmbedding(model_name=model_name, cache_dir=str(workspace_output_dir() / "fastembed_cache"))
 
 
 def _qdrant_vector_search(chunks: list[dict], query: str) -> tuple[list[int], list[float]]:

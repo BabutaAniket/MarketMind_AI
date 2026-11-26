@@ -29,9 +29,13 @@ python3 -m venv .venv
 .\.venv\Scripts\python.exe -m marketmind
 ```
 
-Options: `--port 8080`, `--host 0.0.0.0`, `--no-browser`. API documentation is at `/docs`, metrics at `/metrics`.
+Create an account on the sign-in page the first time you open the app. Each account gets its own company knowledge, plans, leads, approvals, feedback, and workflow checkpoints.
 
-The app has no login. Run it only on your own machine or a trusted network.
+Options: `--port 8080`, `--host 0.0.0.0`, `--no-browser`. Sign in before opening API documentation at `/docs` or metrics at `/metrics`.
+
+Passwords must be at least 12 characters. Sessions use an HttpOnly, SameSite cookie that normally ends when the browser closes; the server also expires stored sessions after 30 days. Account and session records are stored in `data/output/accounts.sqlite`; each user's records are in a separate folder below `data/output/users`.
+
+Registration is open and there is no email verification, password reset, or account administration. This prototype is not ready to be exposed directly to the public internet. For a TLS-terminated deployment, set `AUTH_COOKIE_SECURE=true` so browsers only send the login cookie over HTTPS.
 
 ## 3. First use
 
@@ -73,7 +77,7 @@ This opens the Company Knowledge window. The desktop tools are separate windows 
 .\.venv\Scripts\python.exe apps\desktop\evaluation_app.py
 ```
 
-Each app reads and writes the same files in `data/output` as the web app. No web server is needed for the desktop tools.
+Each app reads and writes the legacy shared files in `data/output`; desktop tools do not use web-app accounts or per-user workspaces. No web server is needed for the desktop tools.
 
 ## 6. Test
 
@@ -97,7 +101,7 @@ Defines the app on :8000, four FastMCP services, Prometheus on :9090 and Grafana
 
 ## Generated files
 
-Everything the apps write goes to `data/output` (git-ignored): knowledge, retrieval results, FastEmbed cache, plans, drafts, leads, feedback, lessons, approval records and SQLite workflow checkpoints. Delete the folder contents to reset.
+Everything the apps write goes to `data/output` (git-ignored): account/session database and separate per-user knowledge, retrieval results, FastEmbed cache, plans, drafts, leads, feedback, lessons, approval records and SQLite workflow checkpoints. Deleting the output folder removes accounts and their saved data.
 
 ## Troubleshooting
 

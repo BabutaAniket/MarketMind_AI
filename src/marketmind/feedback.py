@@ -7,7 +7,7 @@ from datetime import datetime
 
 from marketmind.guardrails import sanitize_data
 from marketmind.memory_store import append_jsonl
-from marketmind.settings import FEEDBACK_FILE, LESSONS_FILE
+from marketmind.settings import workspace_file
 
 
 def extract_draft(plan: dict) -> str:
@@ -31,6 +31,6 @@ def build_feedback_record(plan: dict, decision: str, raw_input: str, corrected_m
 
 
 def save_feedback(record: dict) -> None:
-    append_jsonl(FEEDBACK_FILE, record)
+    append_jsonl(workspace_file("feedback_records.jsonl"), record)
     if record["human_approved"]:
-        append_jsonl(LESSONS_FILE, record)
+        append_jsonl(workspace_file("approved_lessons.jsonl"), record)

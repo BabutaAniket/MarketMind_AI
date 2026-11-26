@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from marketmind.memory_store import append_jsonl, read_jsonl
-from marketmind.settings import LEADS_FILE
+from marketmind.settings import workspace_file
 
 
 def list_leads(limit: int = 50) -> dict:
-    return {"ok": True, "read_only": True, "leads": read_jsonl(LEADS_FILE)[-limit:]}
+    return {"ok": True, "read_only": True, "leads": read_jsonl(workspace_file("leads.jsonl"))[-limit:]}
 
 
 def add_lead(lead: dict, *, approved: bool = False) -> dict:
@@ -20,5 +20,5 @@ def add_lead(lead: dict, *, approved: bool = False) -> dict:
         **lead,
         "human_approved": True,
     }
-    append_jsonl(LEADS_FILE, record)
+    append_jsonl(workspace_file("leads.jsonl"), record)
     return {"ok": True, "read_only": False, "lead": record}

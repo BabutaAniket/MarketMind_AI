@@ -21,6 +21,10 @@ async function api(path, body, method) {
     options.body = JSON.stringify(body);
   }
   const response = await fetch(path, options);
+  if (response.status === 401) {
+    window.location.assign("/login");
+    throw new Error("Your session has ended. Please sign in again.");
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
   return data;
@@ -344,3 +348,11 @@ setupFeedback();
 setupEvaluation();
 setupCompany().catch((error) => show($("company-out"), error.message, true));
 refreshStatus();
+$("sign-out").onclick = async () => {
+  const response = await fetch("/api/auth/logout", { method: "POST" });
+  if (!response.ok) {
+    window.alert("Could not sign out. Please try again.");
+    return;
+  }
+  window.location.assign("/login");
+};

@@ -4,7 +4,10 @@
 
 ```mermaid
 flowchart TD
-    U[Browser or desktop user] --> API[FastAPI]
+    U[Browser user] --> AUTH[Login and session cookie]
+    AUTH --> API[FastAPI + workspace middleware]
+    AUTH --> AC[(Accounts and sessions SQLite)]
+    API --> UD[Per-user files and checkpoints]
     API --> G[LangGraph: typed state + SQLite checkpointer]
     G --> IG[Input guardrail]
     IG -->|blocked| STOP[Stop]
@@ -81,7 +84,7 @@ The gateway rejects calls outside an agent's allowlist and enforces the configur
 - The overlap reranker is a deterministic baseline, not a cross-encoder.
 - The 30-query Recall@5 set is hand-labeled for the included synthetic company only.
 - No real Ollama or OpenRouter generation has been run here.
-- No authentication or reviewer identity is implemented.
+- Web accounts have private workspaces and approvals record the signed-in email. There is no email verification, password reset, role system, or login rate limit; desktop apps do not use these accounts.
 - Compose, Grafana and external HTTP MCP transports still need a clean-machine test.
 - Reflexion, E1-E4, the calibrated judge and full held-out evaluation remain pending.
 

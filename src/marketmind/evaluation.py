@@ -6,7 +6,7 @@ import json
 
 from marketmind.guardrails import check_input, check_output
 from marketmind.memory_store import read_jsonl, write_json
-from marketmind.settings import EVAL_DIR, REPORT_FILE, load_config
+from marketmind.settings import EVAL_DIR, load_config, workspace_file
 
 SAFE_SAMPLE = "This draft requires human approval and contains no verified percentage claim."
 
@@ -80,4 +80,4 @@ def run_evaluation() -> dict:
 
 
 def save_report(report: dict) -> None:
-    write_json(REPORT_FILE, report)
+    write_json(workspace_file("evaluation_report.json"), report)

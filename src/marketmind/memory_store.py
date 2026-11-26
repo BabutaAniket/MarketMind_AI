@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from marketmind.settings import LESSONS_FILE
+from marketmind.settings import workspace_file
 
 
 def read_json(path: Path) -> dict:
@@ -37,7 +37,8 @@ def append_jsonl(path: Path, record: dict) -> None:
         stream.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def load_approved_lessons(path: Path = LESSONS_FILE, limit: int = 10) -> list[dict]:
+def load_approved_lessons(path: Path | None = None, limit: int = 10) -> list[dict]:
+    path = path or workspace_file("approved_lessons.jsonl")
     approved = [row for row in read_jsonl(path) if row.get("human_approved") is True]
     return approved[-limit:]
 

@@ -9,7 +9,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from marketmind.settings import KNOWLEDGE_FILE
+from marketmind.settings import workspace_file
 
 PROFILE_FIELDS = [
     ("company_name", "Company name"),
@@ -148,7 +148,8 @@ def build_record(values: dict[str, str], raw_text: str) -> dict:
     }
 
 
-def load_knowledge(path: Path = KNOWLEDGE_FILE) -> dict:
+def load_knowledge(path: Path | None = None) -> dict:
+    path = path or workspace_file("knowledge_base.json")
     if not path.exists():
         raise FileNotFoundError("No saved company knowledge yet. Save the company details first.")
     return json.loads(path.read_text(encoding="utf-8"))

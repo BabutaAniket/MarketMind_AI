@@ -10,7 +10,9 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m marketmind
 ```
 
-The browser opens at <http://127.0.0.1:8000>. Click **Load sample company**, then **Save knowledge**, and follow the tabs. Full instructions, including the local model and Docker, are in [docs/SETUP.md](docs/SETUP.md).
+The browser opens at <http://127.0.0.1:8000>. Create an account or sign in, then click **Load sample company** and **Save knowledge**. Each account has a separate workspace. Full instructions, including the local model and Docker, are in [docs/SETUP.md](docs/SETUP.md).
+
+For a repeatable Docker demo walkthrough, preflight script, and presentation talking points, see [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
 ## What is included
 

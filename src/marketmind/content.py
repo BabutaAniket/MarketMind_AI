@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from marketmind.settings import KNOWLEDGE_FILE
+from marketmind.settings import workspace_file
 
 
 def value(profile: dict, key: str, fallback: str) -> str:
@@ -118,7 +118,7 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "mode": "dry_run",
         "published": False,
-        "source_knowledge_file": str(KNOWLEDGE_FILE),
+        "source_knowledge_file": str(workspace_file("knowledge_base.json")),
         "campaign": common,
         "grounding": {
             "source_references": source_refs,

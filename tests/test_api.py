@@ -9,6 +9,15 @@ from marketmind.settings import SAMPLE_FILE
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def signed_in_user():
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "demo@example.com", "password": "a-very-long-demo-password"},
+    )
+    assert response.status_code == 200
+
+
 @pytest.fixture
 def sample():
     return json.loads(SAMPLE_FILE.read_text(encoding="utf-8"))
@@ -29,6 +38,62 @@ def test_health_and_homepage():
     favicon = client.get("/static/favicon.svg")
     assert favicon.status_code == 200 and "<svg" in favicon.text
     assert 'href="/static/favicon.svg"' in page.text
+
+
+def test_authentication_and_user_data_are_isolated():
+    first = TestClient(app)
+    second = TestClient(app)
+    first_register = first.post(
+        "/api/auth/register",
+        json={"email": "first@example.com", "password": "first-long-demo-password"},
+    )
+    second_register = second.post(
+        "/api/auth/register",
+        json={"email": "second@example.com", "password": "second-long-demo-password"},
+    )
+    assert first_register.status_code == second_register.status_code == 200
+    cookie = first_register.headers["set-cookie"].lower()
+    assert "httponly" in cookie and "samesite=strict" in cookie and "max-age=" not in cookie
+    assert first.get("/api/knowledge").json()["saved"] is False
+    cross_site = first.post(
+        "/api/knowledge",
+        headers={"origin": "https://attacker.example"},
+        json={"company_profile": {"company_name": "Not saved"}, "source_text": "Not saved"},
+    )
+    assert cross_site.status_code == 403
+
+    sample_data = json.loads(SAMPLE_FILE.read_text(encoding="utf-8"))
+    assert first.post("/api/knowledge", json=sample_data).status_code == 200
+    assert second.get("/api/knowledge").json()["saved"] is False
+    prepared = first.post(
+        "/api/actions/prepare",
+        json={"action_type": "save_note", "payload": {"note": "private"}},
+    )
+    assert prepared.status_code == 200
+    assert second.get("/api/actions").json()["actions"] == []
+
+    outsider = TestClient(app)
+    assert outsider.get("/api/knowledge").status_code == 401
+    assert outsider.get("/metrics").status_code == 200
+    redirected = outsider.get("/", follow_redirects=False)
+    assert redirected.status_code == 303 and redirected.headers["location"] == "/login"
+    assert first.post("/api/auth/logout").json() == {"logged_out": True}
+    assert first.get("/api/knowledge").status_code == 401
+    login_response = first.post(
+        "/api/auth/login",
+        json={"email": "first@example.com", "password": "first-long-demo-password"},
+    )
+    assert login_response.status_code == 200
+    assert first.get("/api/knowledge").json()["saved"] is True
+
+
+def test_registration_rejects_short_password():
+    unregistered = TestClient(app)
+    response = unregistered.post(
+        "/api/auth/register",
+        json={"email": "short@example.com", "password": "short"},
+    )
+    assert response.status_code == 422
 
 
 def test_metrics_exposed():
@@ -112,9 +177,15 @@ def test_lead_approval_flow_over_api():
     assert bad.status_code == 409
     good = client.post(
         "/api/actions/decide",
-        json={"action_id": action["action_id"], "decision": "approve", "payload_hash": action["payload_hash"]},
+        json={
+            "action_id": action["action_id"],
+            "decision": "approve",
+            "payload_hash": action["payload_hash"],
+            "reviewer": "forged@example.com",
+        },
     )
     assert good.status_code == 200
+    assert good.json()["decided_by"] == "demo@example.com"
     assert len(client.get("/api/leads").json()["leads"]) == 1
 
 
@@ -144,7 +215,7 @@ def test_retrieval_evaluation_endpoint_saves_report(tmp_path, monkeypatch):
         "change": 0.1,
     }
     monkeypatch.setattr("marketmind.api.app.run_retrieval_evaluation", lambda: report)
-    monkeypatch.setattr("marketmind.api.app.EVAL_DIR", tmp_path)
+    monkeypatch.setattr("marketmind.api.app.workspace_file", lambda name: tmp_path / name)
     response = client.post("/api/evaluation/retrieval")
     assert response.status_code == 200 and response.json() == report
     assert (tmp_path / "retrieval_report.json").exists()
