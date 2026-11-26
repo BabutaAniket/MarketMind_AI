@@ -54,7 +54,7 @@ MarketMind_AI/
 
 ## Status
 
-This is a working prototype, not a finished capstone. Local workflow, FastMCP tools and retrieval benchmarks are now implemented and tested. The campaign evaluation gate still fails; held-out experiments, judge calibration, real model use, authentication and Docker verification remain pending. See [docs/GUIDELINE_STATUS.md](docs/GUIDELINE_STATUS.md).
+This is a working prototype, not a finished capstone. Local workflow, FastMCP tools, basic account/workspace separation and retrieval benchmarks are implemented and tested. The campaign evaluation gate still fails; held-out experiments, judge calibration, real model use, stronger identity controls and Docker verification remain pending. See [docs/GUIDELINE_STATUS.md](docs/GUIDELINE_STATUS.md) and [docs/VIVA_PREPARATION.md](docs/VIVA_PREPARATION.md).
 
 ## Safety boundary
 

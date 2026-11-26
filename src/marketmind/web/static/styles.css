@@ -479,6 +479,7 @@ pre {
 }
 
 .auth-card {
+  display: block;
   width: min(100%, 430px);
   padding: 34px;
   border: 1px solid var(--line);
