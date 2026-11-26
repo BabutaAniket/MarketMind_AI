@@ -17,6 +17,8 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
     company = value(profile, "company_name", "Our company")
     brand = value(profile, "brand_name", value(profile, "products", "Our product"))
     products = value(profile, "products", brand)
+    if products.startswith(("A ", "An ", "The ")):
+        products = products[0].lower() + products[1:]
     audience = value(profile, "target_customer", "customers looking for a reliable solution")
     problem = value(profile, "customer_problem", "a common customer problem")
     usp = value(profile, "usp", "quality, reliability and professional support")
@@ -37,24 +39,24 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
         "audience": audience,
         "problem": problem,
         "usp": usp,
-        "tone": tone,
         "location": location,
         "campaign_goal": goal,
         "call_to_action": cta,
+        "tone": tone,
         "safety_note": restrictions,
     }
 
+    location_line = f" Location: {location}." if location.lower() not in {"online", "not provided"} else ""
     drafts = {
         "instagram": {
             "format": "caption",
             "text": (
-                f"Looking for a dependable solution for {problem.lower()}?\n\n"
-                f"Meet {brand} by {company}. {products}.\n"
-                f"Why consider it: {usp}.\n\n"
-                f"Designed for {audience.lower()} in {location}.\n"
+                f"Need a shared view of team work?\n\n"
+                f"{brand} is {products} for {audience}.\n"
+                f"{usp}.{location_line}\n\n"
                 f"{cta}\n\n"
-                f"# {brand.replace(' ', '')} #Innovation #ReliableSolutions"
-            ).replace("# ", "#"),
+                f"#{''.join(brand.split())}"
+            ),
             "visual_brief": (
                 f"Create a clean product-focused advertising image for {brand}; "
                 f"show the product in a realistic {location} setting, with no unsupported claims."
@@ -63,12 +65,10 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
         "facebook": {
             "format": "post",
             "text": (
-                f"{brand} — a practical choice for {audience}.\n\n"
-                f"Customer need: {problem}.\n"
-                f"Our approach: {usp}.\n\n"
-                f"Campaign objective: {goal}\n"
+                f"{brand} is {products} for {audience}.\n\n"
+                f"{usp}.{location_line}\n\n"
                 f"{cta}\n\n"
-                f"Please contact {company} for verified product details and suitability."
+                f"Learn more from {company}."
             ),
             "visual_brief": (
                 f"Create a professional Facebook product graphic for {brand}, using brand-safe "
@@ -78,12 +78,11 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
         "whatsapp": {
             "format": "short_message",
             "text": (
-                f"Hello, this is {company}.\n\n"
-                f"Product: {brand}\n"
-                f"Suitable for: {audience}\n"
-                f"Main benefit: {usp}\n\n"
+                f"Hello, we’d like to introduce {brand}.\n"
+                f"{products} for {audience}.\n"
+                f"{usp}.\n\n"
                 f"{cta}\n"
-                f"Reply CONSULTATION to know more."
+                f"Reply if you’d like to know more."
             ),
             "visual_brief": "Use a simple product image with one verified benefit and one CTA.",
         },
@@ -91,11 +90,9 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
             "format": "subject_and_body",
             "subject": f"A practical solution from {company}: {brand}",
             "text": (
-                f"Dear Customer,\n\n"
-                f"If you are evaluating options for {problem.lower()}, {brand} may be worth reviewing.\n\n"
-                f"Product information: {products}\n"
-                f"Key differentiator: {usp}\n"
-                f"Intended audience: {audience}\n\n"
+                f"Hello,\n\n"
+                f"{brand} is {products} for {audience}.\n"
+                f"{usp}.{location_line}\n\n"
                 f"{cta}\n\n"
                 f"Regards,\n{company}"
             ),
@@ -110,6 +107,7 @@ def build_drafts(knowledge: dict, campaign_goal: str, call_to_action: str) -> di
         "company_profile.target_customer",
         "company_profile.customer_problem",
         "company_profile.usp",
+        "company_profile.offer_price",
         "company_profile.restrictions",
     ]
 

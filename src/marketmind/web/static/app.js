@@ -1,6 +1,10 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+const PRIMARY_STEPS = ["company", "campaign", "drafts", "approvals"];
+let savedProfile = {};
+let activeWorkflow = null;
+let knowledgeSaved = false;
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -26,7 +30,11 @@ async function api(path, body, method) {
     throw new Error("Your session has ended. Please sign in again.");
   }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(data.detail || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -50,17 +58,49 @@ async function guarded(button, target, work) {
 
 function setupTabs() {
   const tabs = $("tabs");
+  const journey = $("journey");
   const sections = [...document.querySelectorAll("main section")];
-  const select = (section) => {
+  const select = (section, updateHistory = true) => {
+    if (!section) return;
     sections.forEach((s) => s.classList.toggle("active", s === section));
     [...tabs.children].forEach((b) => b.setAttribute("aria-selected", String(b.dataset.target === section.id)));
-    if (section.id === "approvals") loadActions();
+    [...journey.children].forEach((b) => {
+      if (b.dataset.target === section.id) b.setAttribute("aria-current", "step");
+      else b.removeAttribute("aria-current");
+    });
+    if (section.id === "approvals") {
+      if (activeWorkflow) renderApproval(activeWorkflow);
+      loadActions();
+    }
     if (section.id === "leads") loadLeads();
+    if (updateHistory) {
+      const hash = PRIMARY_STEPS.includes(section.id) ? `#${section.id}` : `#tools-${section.id}`;
+      if (window.location.hash !== hash) window.history.pushState({ section: section.id }, "", hash);
+    }
   };
   sections.forEach((section) => {
-    tabs.append(el("button", { role: "tab", "data-target": section.id, text: section.dataset.title, onclick: () => select(section) }));
+    if (!PRIMARY_STEPS.includes(section.id)) {
+      tabs.append(el("button", { role: "tab", "data-target": section.id, text: section.dataset.title, onclick: () => select(section) }));
+    }
   });
-  select(sections[0]);
+  PRIMARY_STEPS.forEach((id, index) => {
+    const section = $(id);
+    journey.append(el("button", {
+      type: "button",
+      "data-target": id,
+      text: `${index + 1}. ${section.dataset.title}`,
+      onclick: () => select(section),
+    }));
+  });
+  document.querySelectorAll("[data-next], [data-back]").forEach((button) => {
+    button.addEventListener("click", () => select($(button.dataset.next || button.dataset.back)));
+  });
+  const fromHash = () => {
+    const id = window.location.hash.replace(/^#(tools-)?/, "");
+    select($(id) || sections[0], false);
+  };
+  window.addEventListener("popstate", fromHash);
+  fromHash();
   window.openTab = (id) => select($(id));
 }
 
@@ -85,15 +125,20 @@ async function setupCompany() {
   const info = await api("/api/knowledge");
   const form = $("company-form");
   form.className = "grid";
+  savedProfile = info.company_profile || {};
+  knowledgeSaved = Boolean(info.saved);
   info.profile_fields.forEach(([key, label]) => {
     form.append(el("label", { text: label }, [el("input", { name: key, value: (info.company_profile || {})[key] || "" })]));
   });
   $("source-text").value = info.source_text || "";
+  updateCampaignDefaults(savedProfile);
 
   const fill = (data) => {
     for (const [key, value] of Object.entries(data.company_profile || {})) {
       if (form.elements[key]) form.elements[key].value = value;
     }
+    savedProfile = data.company_profile || {};
+    updateCampaignDefaults(savedProfile);
     if (data.source_text !== undefined) $("source-text").value = data.source_text;
   };
   $("load-sample").onclick = async () => fill(await api("/api/sample"));
@@ -109,9 +154,38 @@ async function setupCompany() {
   $("save-company").onclick = (event) => guarded(event.target, $("company-out"), async () => {
     const profile = Object.fromEntries(new FormData(form).entries());
     const result = await api("/api/knowledge", { company_profile: profile, source_text: $("source-text").value });
+    savedProfile = profile;
+    knowledgeSaved = true;
+    updateCampaignDefaults(profile);
     const warn = result.warnings.length ? ` Warning: source text matches risk patterns (${result.warnings.join(", ")}). Review it.` : "";
-    show($("company-out"), `Saved (${result.word_count} words).${warn}`, result.warnings.length > 0);
+    show($("campaign-out"), `Company information saved (${result.word_count} words).${warn}`, result.warnings.length > 0);
+    window.openTab("campaign");
   });
+}
+
+function updateCampaignDefaults(profile) {
+  const form = $("campaign-form");
+  if (!form) return;
+  const audience = form.elements.audience;
+  const offer = form.elements.offer;
+  if (audience && profile.target_customer) audience.value = profile.target_customer;
+  if (offer && profile.offer_price) offer.value = profile.offer_price;
+  const cta = $("cta");
+  if (cta && profile.offer_price) cta.value = profile.offer_price;
+  updateAudienceWarning();
+}
+
+function updateAudienceWarning() {
+  const expected = String(savedProfile.target_customer || "").trim();
+  const actual = String($("campaign-form").elements.audience.value || "").trim();
+  const mismatch = expected && actual && expected.toLowerCase() !== actual.toLowerCase();
+  $("audience-warning").hidden = !mismatch;
+  $("audience-confirm-wrap").hidden = !mismatch;
+  if (mismatch) {
+    $("audience-warning").textContent = `Your saved profile describes "${expected}". Confirm if you intentionally want to target "${actual}" instead.`;
+  } else {
+    $("audience-confirm").checked = false;
+  }
 }
 
 function resultCard(item, index) {
@@ -135,9 +209,14 @@ function setupCampaign() {
     const values = Object.fromEntries(new FormData($("campaign-form")).entries());
     values.channels = values.channels.split(",").map((c) => c.trim()).filter(Boolean);
     values.use_llm = $("use-llm").checked;
+    values.design = new FormData($("campaign-options")).get("design") || "team";
     $("plan-steps").replaceChildren();
     $("plan-out").replaceChildren();
     const response = await fetch("/api/plan/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
+    if (response.status === 401) {
+      window.location.assign("/login");
+      throw new Error("Your session has ended. Please sign in again.");
+    }
     if (!response.ok) throw new Error((await response.json().catch(() => ({}))).detail || "Request failed");
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -153,77 +232,208 @@ function setupCampaign() {
   });
 
   $("run-workflow").onclick = (event) => guarded(event.target, $("workflow-out"), async () => {
+    updateAudienceWarning();
+    if (!knowledgeSaved) throw new Error("Save company information before creating a campaign.");
+    if (!$("campaign-form").elements.audience.value.trim()) throw new Error("Enter an audience for this campaign.");
+    if (!$("campaign-form").elements.offer.value.trim()) throw new Error("Enter an offer or call to action.");
+    if (!$("campaign-form").elements.channels.value.trim()) throw new Error("Enter at least one channel.");
+    if (!$("audience-confirm-wrap").hidden && !$("audience-confirm").checked) {
+      throw new Error("Confirm the audience change or use the saved customer profile.");
+    }
     const campaign = Object.fromEntries(new FormData($("campaign-form")).entries());
     campaign.channels = campaign.channels.split(",").map((channel) => channel.trim()).filter(Boolean);
+    campaign.design = new FormData($("campaign-options")).get("design") || "team";
     const result = await api("/api/workflow/start", { campaign });
+    sessionStorage.setItem("marketmind.workflow", result.thread_id);
     renderWorkflow(result);
+    if (result.plan && result.status === "awaiting_approval") window.openTab("drafts");
   });
+  $("campaign-form").elements.audience.addEventListener("input", updateAudienceWarning);
+}
+
+async function restoreWorkflow() {
+  const threadId = sessionStorage.getItem("marketmind.workflow");
+  if (!threadId) return;
+  try {
+    const result = await api(`/api/workflow/${encodeURIComponent(threadId)}`);
+    activeWorkflow = result;
+    renderWorkflow(result);
+    if (result.status === "awaiting_approval") window.openTab("approvals");
+  } catch (error) {
+    if (error.status === 404) sessionStorage.removeItem("marketmind.workflow");
+    else show($("approval-out"), `Could not restore the pending review: ${error.message}`, true);
+  }
 }
 
 function renderWorkflow(result) {
+  activeWorkflow = result;
   const out = $("workflow-out");
-  const card = el("div", { class: "card" }, [
-    el("h4", { text: `LangGraph workflow: ${result.status}` }),
-    el("div", { class: "meta", text: `Thread ${result.thread_id} | checkpointed in SQLite` }),
-    el("ol", { class: "steps" }, (result.events || []).map((item) => el("li", {
-      text: `${item.node}: ${item.status || item.result || item.passages || (item.passed === undefined ? "complete" : item.passed ? "passed" : "review required")}`,
+  out.replaceChildren();
+  if (result.errors?.length && !result.plan) {
+    show(out, result.errors.join(" "), true);
+    return;
+  }
+  out.append(el("div", {
+    class: `msg ${result.review?.passed ? "safe-banner" : ""}`,
+    text: result.review?.passed
+      ? "Draft checks completed. These are template-generated suggestions based on your saved company profile."
+      : "The workflow prepared a draft for human review.",
+  }));
+  const draftList = Object.entries(result.drafts || {}).map(([channel, draft]) => {
+    const card = el("article", { class: "card" }, [
+      el("h4", { text: channel }),
+      el("p", { class: "text", text: draft.text || "" }),
+    ]);
+    if (draft.subject) card.append(el("div", { class: "meta", text: `Email subject: ${draft.subject}` }));
+    return card;
+  });
+  const sourceDetails = el("details", {}, [
+    el("summary", { text: "Company facts used as evidence" }),
+    el("ul", {}, (result.plan?.source_references || []).map((source) => el("li", {
+      text: `${source.source_ref} (${source.source_date}): ${source.evidence_text}`,
     }))),
   ]);
-  if (result.errors?.length) card.append(el("div", { class: "msg error", text: result.errors.join("; ") }));
-  if (result.plan) card.append(el("details", {}, [
-    el("summary", { text: "View plan" }),
-    json(result.plan),
-  ]));
-  if (result.review) card.append(el("div", { class: "msg", text: result.review.passed ? "Draft checks passed." : "Draft checks require review." }));
-
-  const approval = result.interrupts?.[0];
-  if (approval) {
-    const editor = el("textarea", { rows: "10" });
-    editor.value = JSON.stringify(approval.payload, null, 2);
-    const notice = el("div", { class: "msg", text: `Review the exact payload. Hash: ${approval.payload_hash}` });
-    const controls = el("div", { class: "row" });
-    const send = async (button, decision, extra = {}) => {
-      button.disabled = true;
-      try {
-        const next = await api(`/api/workflow/${encodeURIComponent(result.thread_id)}/resume`, {
-          decision,
-          payload_hash: approval.payload_hash,
-          reviewer: "web user",
-          ...extra,
-        });
-        renderWorkflow(next);
-      } catch (error) {
-        show(out, error.message, true);
-      } finally {
-        button.disabled = false;
-      }
-    };
-    controls.append(
-      el("button", { text: "Approve exact payload", onclick: (event) => send(event.currentTarget, "approve") }),
-      el("button", { class: "secondary", text: "Save edit (new approval required)", onclick: (event) => {
-        let edited;
-        try { edited = JSON.parse(editor.value); } catch { return show(out, "Edited payload must be valid JSON.", true); }
-        return send(event.currentTarget, "edit", { edited_payload: edited });
-      } }),
-      el("button", { class: "secondary", text: "Reject", onclick: (event) => send(event.currentTarget, "reject") }),
-    );
-    card.append(notice, editor, controls);
-  }
-  if (result.action) card.append(el("div", { class: "meta", text: `Action ${result.action.action_id}: ${result.action.status}; external side effects are disabled.` }));
-  out.replaceChildren(card);
+  $("drafts-out").replaceChildren(...draftList, sourceDetails);
+  const technical = el("details", {}, [
+    el("summary", { text: "Workflow details" }),
+    el("div", { class: "meta", text: `Checkpoint thread: ${result.thread_id}` }),
+    el("ol", { class: "steps" }, (result.events || []).map((item) => el("li", { text: item.node.replaceAll("_", " ") }))),
+  ]);
+  if (result.errors?.length) technical.append(el("div", { class: "msg error", text: result.errors.join("; ") }));
+  out.append(technical);
+  renderApproval(result);
 }
 
 function handlePlanEvent(event) {
   if (event.step === "done") {
-    show($("plan-out"), json(event.plan));
+    const plan = event.plan;
+    const generation = plan.generation || { status: "template_generated", message: "Template-generated plan." };
+    const summary = el("div", { class: "card" }, [
+      el("h4", { text: "Campaign plan" }),
+      el("div", { class: `msg ${generation.status === "ai_generated" ? "safe-banner" : generation.status === "template_fallback" ? "warning" : ""}`, text: `${generation.message}${generation.model ? ` Model: ${generation.model}.` : ""}` }),
+      el("p", { class: "text", text: `Audience: ${plan.inputs.audience}\nOffer: ${plan.inputs.offer}\nChannels: ${plan.inputs.channels.join(", ")}` }),
+    ]);
+    const technical = el("details", {}, [el("summary", { text: "Sources and plan details" })]);
+    technical.append(json({ sources: plan.source_references, generation }));
+    const result = el("div", {}, [summary]);
+    if (generation.status === "ai_generated" && plan.qwen3_output) {
+      result.append(modelSuggestionCards(plan.qwen3_output));
+    }
+    result.append(technical);
+    show($("plan-out"), result);
     return;
   }
   if (event.step === "blocked") {
     show($("plan-out"), event.error, true);
     return;
   }
-  const detail = event.error || event.status || (event.passages !== undefined ? `${event.passages} passages` : event.allowed === false ? "blocked" : "ok");
-  $("plan-steps").append(el("li", { text: `${event.step}: ${detail}` }));
+  const label = { input_guardrail: "Safety check", retrieval: "Finding company evidence", plan: "Preparing campaign plan", llm: "Optional model generation" }[event.step] || event.step;
+  const detail = event.error || (event.step === "llm" && event.status === "failed" ? "failed; template fallback will be shown" : event.status === "done" ? "complete" : event.passages !== undefined ? `${event.passages} passages found` : event.allowed === false ? "blocked" : "complete");
+  $("plan-steps").append(el("li", { text: `${label}: ${detail}` }));
+}
+
+function modelSuggestionCards(output) {
+  const cards = el("div", { class: "cards" });
+  const entries = output && typeof output === "object" && !Array.isArray(output) ? Object.entries(output) : [["Suggestions", output]];
+  entries.forEach(([key, value]) => {
+    const text = typeof value === "string" ? value : Array.isArray(value) ? value.join("\n") : JSON.stringify(value, null, 2);
+    cards.append(el("article", { class: "card" }, [
+      el("h4", { text: key.replaceAll("_", " ") }),
+      el("p", { class: "text", text: String(text || "") }),
+    ]));
+  });
+  return cards;
+}
+
+function renderApproval(result) {
+  const out = $("approval-out");
+  const approval = result.interrupts?.[0];
+  if (result.status === "approved_mock") {
+    show(out, "Campaign approved for the demo. This recorded a mock action only; nothing was sent or published.");
+    return;
+  }
+  if (result.status === "rejected") {
+    show(out, "Campaign rejected. No external action was taken.");
+    return;
+  }
+  if (!approval) {
+    if (result.errors?.length) show(out, result.errors.join(" "), true);
+    else show(out, "Create campaign drafts before reviewing an approval.");
+    return;
+  }
+  const payload = approval.payload;
+  const summary = payload.campaign_summary || {};
+  const card = el("div", { class: "card" }, [
+    el("h4", { text: "Campaign summary" }),
+    el("p", { class: "text", text: `Company: ${summary.company_name || "Not specified"}\nProduct: ${summary.brand_name || "Not specified"}\nObjective: ${summary.objective || "Not specified"}\nAudience: ${summary.audience || "Not specified"}\nOffer: ${summary.offer || "Not specified"}\nChannels: ${(summary.channels || []).join(", ")}\nTone: ${summary.tone || "Not specified"}\nBudget: ${summary.budget || "Not specified"}` }),
+    el("h4", { text: "Drafts included in this approval" }),
+  ]);
+  const draftEntries = Object.entries(payload.drafts || {});
+  draftEntries.forEach(([channel, draft]) => {
+    card.append(
+      el("h4", { text: channel }),
+      el("p", { class: "text", text: (typeof draft === "string" ? draft : draft.text) || "" }),
+    );
+    if (draft.subject) card.append(el("div", { class: "meta", text: `Subject: ${draft.subject}` }));
+  });
+  if (payload.sources?.length) {
+    card.append(el("details", {}, [
+      el("summary", { text: "Evidence used" }),
+      el("ul", {}, payload.sources.map((source) => el("li", {
+        text: `${source.source_ref}: ${source.evidence_text}`,
+      }))),
+    ]));
+  }
+  const editorLabel = el("label", { text: "Edit one channel draft" });
+  const channelSelect = el("select", { class: "review-channel" }, draftEntries.map(([channel]) => el("option", { value: channel, text: channel })));
+  const editor = el("textarea", { class: "review-copy", rows: "6" });
+  const syncEditor = () => {
+    const item = (payload.drafts || {})[channelSelect.value];
+    editor.value = typeof item === "string" ? item : item?.text || "";
+  };
+  channelSelect.addEventListener("change", syncEditor);
+  syncEditor();
+  editorLabel.append(channelSelect);
+  card.append(
+    el("div", { class: "msg safe-banner", text: "This action is a demo only. Approval will not publish, email, message, or contact anyone." }),
+    editorLabel,
+    editor,
+  );
+  const controls = el("div", { class: "row" });
+  const send = async (button, decision, editedPayload) => {
+    button.disabled = true;
+    try {
+      const next = await api(`/api/workflow/${encodeURIComponent(result.thread_id)}/resume`, {
+        decision,
+        payload_hash: approval.payload_hash,
+        ...(editedPayload ? { edited_payload: editedPayload } : {}),
+      });
+      renderWorkflow(next);
+      renderApproval(next);
+    } catch (error) {
+      show(out, error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  controls.append(
+    el("button", { text: "Approve this campaign", onclick: (event) => send(event.currentTarget, "approve") }),
+    el("button", { class: "secondary", text: "Save edit for re-approval", onclick: (event) => {
+      const edited = JSON.parse(JSON.stringify(payload));
+      const draft = edited.drafts[channelSelect.value];
+      if (typeof draft === "string") edited.drafts[channelSelect.value] = editor.value;
+      else draft.text = editor.value;
+      return send(event.currentTarget, "edit", edited);
+    } }),
+    el("button", { class: "secondary", text: "Reject campaign", onclick: (event) => send(event.currentTarget, "reject") }),
+  );
+  const integrity = el("details", {}, [
+    el("summary", { text: "Technical approval details" }),
+    el("div", { class: "meta", text: `Thread ${result.thread_id}; payload hash ${approval.payload_hash}` }),
+  ]);
+  card.append(controls, integrity);
+  if (result.errors?.length) card.append(el("div", { class: "msg error", text: result.errors.join("; ") }));
+  out.replaceChildren(card);
 }
 
 function draftCard(channel, draft) {
@@ -243,9 +453,9 @@ function draftCard(channel, draft) {
 }
 
 function setupDrafts() {
-  $("run-drafts").onclick = (event) => guarded(event.target, $("drafts-out"), async () => {
+  $("run-drafts").onclick = (event) => guarded(event.target, $("extra-drafts-out"), async () => {
     const record = await api("/api/drafts", { campaign_goal: $("goal").value, call_to_action: $("cta").value });
-    $("drafts-out").replaceChildren(...Object.entries(record.drafts).map(([channel, draft]) => draftCard(channel, draft)));
+    $("extra-drafts-out").replaceChildren(...Object.entries(record.drafts).map(([channel, draft]) => draftCard(channel, draft)));
   });
 }
 
@@ -346,7 +556,9 @@ setupDrafts();
 setupLeads();
 setupFeedback();
 setupEvaluation();
-setupCompany().catch((error) => show($("company-out"), error.message, true));
+setupCompany()
+  .then(restoreWorkflow)
+  .catch((error) => show($("company-out"), error.message, true));
 refreshStatus();
 $("sign-out").onclick = async () => {
   const response = await fetch("/api/auth/logout", { method: "POST" });
@@ -354,5 +566,6 @@ $("sign-out").onclick = async () => {
     window.alert("Could not sign out. Please try again.");
     return;
   }
+  sessionStorage.removeItem("marketmind.workflow");
   window.location.assign("/login");
 };

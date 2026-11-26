@@ -245,17 +245,34 @@ def _revise(state: WorkflowState) -> dict[str, Any]:
 
 
 def _prepare(state: WorkflowState) -> dict[str, Any]:
+    plan = state["plan"]
+    inputs = plan.get("inputs", {})
+    company = plan.get("company_context", {})
+    approval_payload = {
+        "campaign_summary": {
+            "company_name": company.get("company_name", ""),
+            "brand_name": company.get("brand_name", ""),
+            "objective": inputs.get("objective", ""),
+            "audience": inputs.get("audience", ""),
+            "offer": inputs.get("offer", ""),
+            "channels": inputs.get("channels", []),
+            "tone": inputs.get("tone", ""),
+            "budget": inputs.get("budget", ""),
+        },
+        "drafts": {
+            channel: {key: draft[key] for key in ("text", "subject") if key in draft}
+            for channel, draft in state.get("drafts", {}).items()
+        },
+        "sources": [
+            {"source_ref": item.get("source_ref", ""), "evidence_text": item.get("text", "")}
+            for item in state.get("evidence", [])
+        ],
+    }
     action, tool_event = invoke_tool(
         "publisher",
         configured_server("actions", actions_server),
         "prepare_workflow_publish",
-        {
-            "payload": {
-                "plan": state["plan"],
-                "drafts": state["drafts"],
-                "evidence": state.get("evidence", []),
-            }
-        },
+        {"payload": approval_payload},
         prior_calls=len(state.get("tool_calls", [])),
     )
     if not action["ok"]:

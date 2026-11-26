@@ -14,17 +14,29 @@
   <header>
     <div>
       <h1>MarketMind AI</h1>
-      <p>Grounded campaign planning with human approval. Nothing is published externally.</p>
+      <p>Turn approved company facts into campaign drafts you can review. Nothing is sent or published.</p>
     </div>
     <div id="status" class="pills" aria-live="polite"></div>
     <button id="sign-out" class="header-button" type="button">Sign out</button>
   </header>
 
-  <nav id="tabs" role="tablist"></nav>
-
   <main>
-    <section id="company" data-title="1. Company">
-      <h2>Company knowledge</h2>
+    <div class="journey-heading">
+      <div>
+        <p class="eyebrow">YOUR CAMPAIGN WORKSPACE</p>
+        <h2 class="journey-title">From company facts to reviewed drafts</h2>
+        <p class="hint">Use the sample company to explore the workflow. Review all content before using it.</p>
+      </div>
+      <nav id="journey" aria-label="Campaign steps"></nav>
+    </div>
+    <details class="more-tools">
+      <summary>More tools</summary>
+      <nav id="tabs" role="tablist" aria-label="More tools"></nav>
+    </details>
+
+    <section id="company" data-title="Company">
+      <h2>1. Add company information</h2>
+      <p class="step-intro">Campaign ideas are based on the facts you save here. Use approved information only.</p>
       <div class="row">
         <button id="load-sample" class="secondary">Load sample company</button>
         <label class="secondary file">Import .txt / .md / .json / .csv<input id="import-file" type="file" accept=".txt,.md,.json,.csv"></label>
@@ -33,9 +45,10 @@
       <label>Source text <textarea id="source-text" rows="8" placeholder="Paste approved product and company information"></textarea></label>
       <button id="save-company">Save knowledge</button>
       <div id="company-out" class="out"></div>
+      <div class="step-actions"><span>Next: set up your campaign</span><button data-next="campaign" class="next-step">Continue</button></div>
     </section>
 
-    <section id="search" data-title="2. Search">
+    <section id="search" data-title="Evidence search">
       <h2>Evidence search</h2>
       <div class="row">
         <input id="query" value="What are the main customer benefits?">
@@ -44,44 +57,77 @@
       <div id="search-out" class="out"></div>
     </section>
 
-    <section id="campaign" data-title="3. Campaign">
-      <h2>Campaign plan</h2>
+    <section id="campaign" data-title="Campaign">
+      <h2>2. Set up your campaign</h2>
+      <p class="step-intro">Choose the audience, offer and channels. We’ll use your saved company facts to prepare draft messages.</p>
       <form id="campaign-form" class="grid">
-        <label>Objective <input name="objective" value="Generate qualified leads"></label>
-        <label>Audience <input name="audience" value="Business decision-makers in India"></label>
-        <label>Offer <input name="offer" value="Book a product consultation"></label>
-        <label>Channels <input name="channels" value="Instagram, Facebook, WhatsApp, Email"></label>
+        <label>Campaign objective <input name="objective" value="Introduce the product to its target audience"></label>
+        <label>Audience <input name="audience" value=""></label>
+        <label>Offer / call to action <input name="offer" value=""></label>
+        <label>Channels <input name="channels" value="Instagram" aria-describedby="channels-hint"><span class="hint" id="channels-hint">Separate multiple channels with commas.</span></label>
         <label>Tone <input name="tone" value="Professional, clear, trustworthy"></label>
         <label>Budget <input name="budget" value="Small test budget"></label>
-        <label>Workflow design
+        <label class="check audience-confirmation" id="audience-confirm-wrap" hidden><input type="checkbox" id="audience-confirm"> I confirm this audience is intentionally different from the saved customer profile.</label>
+      </form>
+      <p id="audience-warning" class="msg warning" hidden></p>
+      <div id="campaign-out" class="out"></div>
+      <details class="advanced-options">
+        <summary>Technical workflow options</summary>
+        <form id="campaign-options">
+          <label>Workflow design
           <select name="design">
             <option value="team" selected>Team workflow (C2)</option>
             <option value="single">Single agent (C1)</option>
             <option value="fixed">Fixed template (C0)</option>
           </select>
-        </label>
-      </form>
-      <label class="check"><input type="checkbox" id="use-llm"> Also generate drafts with the local model (Ollama)</label>
-      <button id="run-plan">Create plan</button>
-      <ol id="plan-steps" class="steps"></ol>
-      <div id="plan-out" class="out"></div>
-      <h3>Resumable approval workflow</h3>
-      <p class="hint">Runs the LangGraph workflow, saves checkpoints, and pauses for human approval of the exact mock action.</p>
-      <button id="run-workflow" class="secondary">Run approval workflow</button>
-      <div id="workflow-out" class="cards"></div>
-    </section>
-
-    <section id="drafts" data-title="4. Drafts">
-      <h2>Channel drafts</h2>
-      <div class="grid">
-        <label>Campaign goal <input id="goal" placeholder="Create awareness and invite a consultation"></label>
-        <label>Call to action <input id="cta" placeholder="Request a product consultation"></label>
+          </label>
+        </form>
+        <p class="hint">The guided workflow uses profile-based templates. Optional model generation is available below and is labeled separately.</p>
+        <label class="check"><input type="checkbox" id="use-llm"> Try optional model generation</label>
+        <button id="run-plan" class="secondary">Generate an experimental plan</button>
+        <ol id="plan-steps" class="steps"></ol>
+      </details>
+      <div class="step-actions">
+        <button data-back="company" class="secondary">Back</button>
+        <span>Next: prepare your draft</span>
+        <button id="run-workflow" class="next-step">Create campaign drafts</button>
       </div>
-      <button id="run-drafts">Generate drafts</button>
-      <div id="drafts-out" class="cards"></div>
+      <div id="workflow-out" class="cards"></div>
+      <div id="plan-out" class="out"></div>
     </section>
 
-    <section id="leads" data-title="5. Leads">
+    <section id="drafts" data-title="Draft review">
+      <h2>3. Review your drafts</h2>
+      <p class="step-intro">These drafts are template-generated from your saved profile, not generated by a language model. Check the wording and evidence before proceeding.</p>
+      <div id="drafts-out" class="cards"></div>
+      <details class="advanced-options">
+        <summary>Generate standalone channel drafts</summary>
+        <div class="grid">
+          <label>Campaign goal <input id="goal" placeholder="Create awareness and invite a consultation"></label>
+          <label>Call to action <input id="cta" placeholder="Request a guided product walkthrough"></label>
+        </div>
+        <button id="run-drafts" class="secondary">Generate template drafts</button>
+        <div id="extra-drafts-out" class="cards"></div>
+      </details>
+      <div class="step-actions">
+        <button data-back="campaign" class="secondary">Back</button>
+        <span>Next: review the mock action</span>
+        <button data-next="approvals" class="next-step">Continue to approval</button>
+      </div>
+    </section>
+
+    <section id="approvals" data-title="Approval">
+      <h2>4. Review and approve</h2>
+      <p class="step-intro">Approval applies only to the exact campaign package shown below. This demo records a mock action; it does not publish or message anyone.</p>
+      <div id="approval-out" class="cards"></div>
+      <details class="advanced-options">
+        <summary>Other prepared actions</summary>
+        <button id="refresh-actions" class="secondary">Refresh approval queue</button>
+        <div id="actions-out" class="cards"></div>
+      </details>
+    </section>
+
+    <section id="leads" data-title="Lead tools">
       <h2>Lead qualification</h2>
       <form id="lead-form" class="grid"></form>
       <div class="row">
@@ -93,14 +139,7 @@
       <div id="lead-list" class="out"></div>
     </section>
 
-    <section id="approvals" data-title="6. Approvals">
-      <h2>Approval queue</h2>
-      <p class="hint">Approval applies to the exact payload shown. Editing a payload requires a new approval.</p>
-      <button id="refresh-actions" class="secondary">Refresh</button>
-      <div id="actions-out" class="cards"></div>
-    </section>
-
-    <section id="feedback" data-title="7. Feedback">
+    <section id="feedback" data-title="Feedback">
       <h2>Human feedback</h2>
       <p class="hint">Approved lessons guide later local-model prompts. Rejected drafts are kept for audit only.</p>
       <label>Original request <input id="fb-raw"></label>
@@ -113,7 +152,7 @@
       <div id="fb-out" class="out"></div>
     </section>
 
-    <section id="evaluation" data-title="8. Evaluation">
+    <section id="evaluation" data-title="Evaluation">
       <h2>Guardrail evaluation</h2>
       <p class="hint">Runs the input guardrail on the golden set and the red-team set. It does not score agent output quality.</p>
       <button id="run-eval">Run evaluation</button>

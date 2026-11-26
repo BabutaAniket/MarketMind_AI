@@ -64,6 +64,10 @@ def _start(design: str = "team") -> dict:
 def test_langgraph_pauses_then_resumes_after_exact_approval():
     pending = _start()
     approval = pending["interrupts"][0]
+    assert approval["payload"]["campaign_summary"]["audience"] == "Small project teams"
+    assert approval["payload"]["drafts"]["instagram"]["text"]
+    assert approval["payload"]["sources"][0]["evidence_text"]
+    assert "plan" not in approval["payload"]
     status = client.get(f"/api/workflow/{pending['thread_id']}")
     assert status.status_code == 200
     assert status.json()["status"] == "awaiting_approval"

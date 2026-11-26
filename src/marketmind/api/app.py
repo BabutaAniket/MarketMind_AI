@@ -51,6 +51,7 @@ from marketmind.schemas import (
 from marketmind.settings import (
     SAMPLE_FILE,
     STATIC_DIR,
+    load_config,
     workspace_file,
     workspace_scope,
 )
@@ -262,14 +263,33 @@ def plan_events(body: CampaignRequest) -> Iterator[dict]:
         safe_request["tone"],
         safe_request["budget"],
     )
+    plan["generation"] = {
+        "status": "template_generated",
+        "model": None,
+        "message": "Prepared from the saved company profile; no language model was used.",
+    }
     yield {"step": "plan", "created": True}
     if body.use_llm:
         yield {"step": "llm", "status": "generating"}
         try:
             plan["qwen3_output"] = ask_local_qwen(plan)
         except RuntimeError as exc:
+            plan["generation"] = {
+                "status": "template_fallback",
+                "model": None,
+                "message": "Model generation failed; this result is a template-based fallback.",
+                "error": str(exc),
+            }
             yield {"step": "llm", "status": "failed", "error": str(exc)}
         else:
+            llm_config = load_config()["llm"]
+            provider = llm_config["provider"]
+            model = llm_config["ollama_model"] if provider == "ollama" else llm_config["openrouter_model"]
+            plan["generation"] = {
+                "status": "ai_generated",
+                "model": f"{provider}/{model}",
+                "message": "The configured model generated campaign suggestions.",
+            }
             yield {"step": "llm", "status": "done"}
     write_json(workspace_file("campaign_plan.json"), plan)
     yield {"step": "done", "plan": plan}
